@@ -115,11 +115,11 @@ timer_sleep(int64_t ticks){
   */
   if (ticks <= 0) return; // 防止ticks为负值或零
   ASSERT (intr_get_level() == INTR_ON); // 保证中断的打开
-  struct thread *thread = thread_current(); // 获取当前线程指针
-  thread->waiting_time = ticks; // 设置阻塞时间
-  enum intr_level old_level = intr_disable ();    // 关闭中断 保证原子操作
+  struct thread *cur_t = thread_current(); // 获取当前线程指针
+  cur_t->waiting_time = ticks; // 设置阻塞时间
+  enum intr_level old_level = intr_disable();    // 关闭中断 保证原子操作
   thread_block(); // 阻塞线程
-  intr_set_level (old_level); // 将中断还原
+  intr_set_level(old_level); // 将中断还原
   /*
     原函数：
     int64_t start = timer_ticks (); // 获取当前时间
@@ -206,9 +206,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   struct thread *cur_t = thread_current();
   ticks++;
-
   thread_foreach(time_minus, NULL); // 对每一个线程执行time_minus()
-
   if (thread_mlfqs) {
     
     if (!is_idle(cur_t)) {
@@ -226,11 +224,9 @@ timer_interrupt (struct intr_frame *args UNUSED)
         divide_between_fixedPoint_and_integer(multiply_between_fixedPoints_and_integer(load_avg, 59), 60) +
         divide_between_fixedPoint_and_integer(integer_convert_to_fixedPoint(ready_threads), 60)
       );
-
       struct list *all = get_all_list();
       struct list_elem *elem = list_begin(all); // 获得所有线程列表的头号指针
       while (1) {
-        if (elem == list_end(all)) break;
         struct thread *t = list_entry(elem, struct thread, allelem);
         if (!is_idle(t)) {
           t->recent_cpu = (
@@ -248,6 +244,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
           );
           t->priority = check_priority(t->priority);
         }
+        if (elem == list_back(all)) break; 
         elem = list_next(elem);
       }
       /*for (e = list_begin(all); e != list_end(all); e = list_next(e)) {

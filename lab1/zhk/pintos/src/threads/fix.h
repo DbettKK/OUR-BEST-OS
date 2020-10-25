@@ -1,10 +1,6 @@
-#ifndef __THREAD_FIX_H
-#define __THREAD_FIX_H
-
 #include "thread.h"
 
-#define f (1 << 14)
-typedef signed long long int int64_t;
+#define f (1<<14)
 
 fixed_point integer_convert_to_fixedPoint(fixed_point n);
 
@@ -33,5 +29,3 @@ fixed_point divide_between_fixedPoints(fixed_point x, fixed_point y);
 fixed_point divide_between_fixedPoint_and_integer(fixed_point x, int n);
 
 int check_priority(int pri);
-
-#endif /* thread/fixed_point.h */

@@ -77,7 +77,6 @@ sema_down (struct semaphore *sema)
   old_level = intr_disable ();
   while (sema->value == 0) 
     {
-      //list_insert_ordered(&sema->waiters, &thread_current()->elem, sema_cmp, NULL);
       list_push_back (&sema->waiters, &thread_current ()->elem);
       thread_block ();
     }
@@ -215,7 +214,7 @@ lock_acquire (struct lock *lock)
   /* 判断自己优先级是否比当前锁的最高优先级高 如果是 则更新并捐赠. */
   struct thread *cur_t = thread_current(), *lock_h_t;
   
-  if (lock->holder != NULL && !thread_mlfqs) {
+  if (lock->holder != NULL) {
     /* 锁存在持有者.*/
     /* 当前线程由于该锁而阻塞. */
     cur_t->blocked_lock = lock;
@@ -231,7 +230,9 @@ lock_acquire (struct lock *lock)
           /* 新线程尝试获取锁 锁对应的max_pri得到更新 需要重新sort一下. */
           list_sort(&lock_h_t->lock_list, lock_cmp, NULL);
           /* 获得最大优先级. */
-          int lock_max_pri = list_entry(list_front(&lock_h_t->lock_list), struct lock, elem)->max_pri;
+          struct list_elem *tmp_elem = list_front(&lock_h_t->lock_list);
+          struct lock *lock_max = list_entry(tmp_elem, struct lock, elem);
+          int lock_max_pri = lock_max->max_pri;
           lock_h_t->priority = lock_max_pri > lock_h_t->original_pri ? lock_max_pri : lock_h_t->original_pri;
         } else {
           /* 如果当前线程没有持有任何锁 则跳过上面的if 参考priority-donate-one. */
@@ -295,7 +296,9 @@ lock_release (struct lock *lock)
     struct thread *cur_t = thread_current();
     if (!list_empty (&cur_t->lock_list)) {
       list_sort (&cur_t->lock_list, lock_cmp, NULL);
-      int lock_max_pri = list_entry(list_front(&cur_t->lock_list), struct lock, elem)->max_pri;
+      struct list_elem *tmp_elem = list_front(&cur_t->lock_list);
+      struct lock *lock_max = list_entry(tmp_elem, struct lock, elem);
+      int lock_max_pri = lock_max->max_pri;
       cur_t->priority = lock_max_pri > cur_t->original_pri ? lock_max_pri : cur_t->original_pri;
     } else {
       cur_t->priority = cur_t->original_pri;
@@ -367,7 +370,6 @@ cond_wait (struct condition *cond, struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
   
   sema_init (&waiter.semaphore, 0); 
-  //list_insert_ordered(&cond->waiters, &waiter.elem, cond_cmp, NULL);
   list_push_back (&cond->waiters, &waiter.elem);
   lock_release (lock);
   sema_down (&waiter.semaphore);
@@ -423,12 +425,18 @@ sema_cmp(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
 
 static bool
 cond_cmp(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
-  struct semaphore c = list_entry(a, struct semaphore_elem, elem)->semaphore;
-  struct semaphore d = list_entry(b, struct semaphore_elem, elem)->semaphore;
+  struct semaphore_elem *c_cond = list_entry(a, struct semaphore_elem, elem);
+  struct semaphore_elem *d_cond = list_entry(b, struct semaphore_elem, elem);
+  struct semaphore c_sema = c_cond->semaphore;
+  struct semaphore d_sema = d_cond->semaphore;
   /* 一个信号量只有一个线程阻塞. */
-  int a_priority = list_entry(list_front(&c.waiters), struct thread, elem)->priority;
-  int b_priority = list_entry(list_front(&d.waiters), struct thread, elem)->priority;
-  if (a_priority > b_priority) return 1;
+  struct list_elem *c_sema_elem = list_front(&c_sema.waiters);
+  struct list_elem *d_sema_elem = list_front(&d_sema.waiters);
+  struct thread *c_thread = list_entry(c_sema_elem, struct thread, elem);
+  struct thread *d_thread = list_entry(d_sema_elem, struct thread, elem);
+  int c_priority = c_thread->priority;
+  int d_priority = d_thread->priority;
+  if (c_priority > d_priority) return 1;
   return 0;
 }
 
