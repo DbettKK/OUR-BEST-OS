@@ -7,7 +7,7 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include "threads/fix.h"
+#include "threads/self-compute.h"
 
 //#include "threads/thread.c"
 //#include "threads/fix.c"
