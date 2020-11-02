@@ -35,7 +35,11 @@ static void real_time_delay (int64_t num, int32_t denom);
 void
 timer_init (void) 
 {
+  /* PIT -- 可编程间隔定时器 */
+  /* 0 表示 0 号通道，用于计时器；2 表示波形为周期波；第三项为频率 */
+  /* 每秒钟将触发 TIMER_FREQ 次 0 号中断 */
   pit_configure_channel (0, 2, TIMER_FREQ);
+  /* 注册新的中断 */
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
 

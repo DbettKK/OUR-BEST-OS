@@ -79,15 +79,20 @@ main (void)
   char **argv;
 
   /* Clear BSS. */  
+  /* BBS 是一个需要被初始化为全 0 的 segment 的传统名称 */
+  /* 当在函数外声明变量且没有初始化时，变量将放入 BBS */
   bss_init ();
 
   /* Break command line into arguments and parse options. */
+  /* 参数的处理，将在后续执行这些参数 */
   argv = read_command_line ();
   argv = parse_options (argv);
 
   /* Initialize ourselves as a thread so we can use locks,
      then enable console locking. */
+  /* 初始化 thread system，有了完整的 thread structure 是使用 lock 的先决条件 */
   thread_init ();
+  /* 初始化控制台 */
   console_init ();  
 
   /* Greet user. */
@@ -95,6 +100,7 @@ main (void)
           init_ram_pages * PGSIZE / 1024);
 
   /* Initialize memory system. */
+  // TODO 详细了解下这部分初始化
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
@@ -107,15 +113,21 @@ main (void)
 
   /* Initialize interrupt handlers. */
   intr_init ();
+  /* 时钟中断 */
   timer_init ();
+  /* 键盘中断 */
   kbd_init ();
+  /* 将串行输入和键盘输入合并为一个流 */
   input_init ();
 #ifdef USERPROG
   exception_init ();
   syscall_init ();
 #endif
 
+  /* 中断相关的初始化完成 */
+
   /* Start thread scheduler and enable interrupts. */
+  /* 启动调度器 创建 idle thread */
   thread_start ();
   serial_init_queue ();
   timer_calibrate ();

@@ -25,6 +25,7 @@
    the CPU.  See [IA32-v3a] sections 5.10 "Interrupt Descriptor
    Table (IDT)", 5.11 "IDT Descriptors", 5.12.1.2 "Flag Usage By
    Exception- or Interrupt-Handler Procedure". */
+/* 在初始化中设置为中断门 */
 static uint64_t idt[INTR_CNT];
 
 /* Interrupt handler functions for each interrupt. */
@@ -121,10 +122,16 @@ intr_init (void)
   int i;
 
   /* Initialize interrupt controller. */
+  /* PIC -- Programmable Interrupt Controller  可编程中断控制器 */
   pic_init ();
 
   /* Initialize IDT. */
+  /* IDT -- Interrupt Descriptor Table  中断描述符表 */
+  /* INTR_CNT  x86 中断数量 */
   for (i = 0; i < INTR_CNT; i++)
+    /* 中断门 门的目的是在 CPU 希望进行状态切换时提供一种审查机制,保护系统运行 */
+    /* make_intr_gate() 创建了使用所给的DPL调用函数的中断门 */
+    /* DPL -- Descriptor Privilege Level 指定了门的特权级 */
     idt[i] = make_intr_gate (intr_stubs[i], 0);
 
   /* Load IDT register.

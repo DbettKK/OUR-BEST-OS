@@ -63,6 +63,7 @@ static int64_t write_cnt;
 void
 console_init (void) 
 {
+  // TODO 阅读这部分
   lock_init (&console_lock);
   use_console_lock = true;
 }

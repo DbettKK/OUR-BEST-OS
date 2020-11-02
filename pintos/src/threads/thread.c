@@ -87,10 +87,14 @@ static tid_t allocate_tid (void);
 void
 thread_init (void) 
 {
+  /* 当前的中断状态应为关中断 */
   ASSERT (intr_get_level () == INTR_OFF);
 
+  // TODO 阅读这部分
   lock_init (&tid_lock);
+  /* 初始化就绪队列 */
   list_init (&ready_list);
+  /* 初始化全部队列 */
   list_init (&all_list);
 
   /* Set up a thread structure for the running thread. */
