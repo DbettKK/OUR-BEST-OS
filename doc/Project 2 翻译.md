@@ -440,7 +440,7 @@ System Call: void close (int fd)
 参考解决方案仅代表一种可能的解决方案。许多其他解决方案也是可能的，其中许多与参考解决方案有很大不同。某些出色的解决方案可能不会修改参考解决方案修改的所有文件，而某些解决方案可能会修改未参考解决方案修改的文件。
 
  线程/ thread.c | 13
- 线程/thread.h | 26岁以上
+ 线程/thread.h | 26+
  userprog / exception.c | 8
  userprog / process.c | 247 ++++++++++++++++-
  userprog / syscall.c | 468 ++++++++++++++++++++++++++++++++-
