@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/timer.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -201,6 +202,9 @@ thread_create (const char *name, int priority,
   sf = alloc_frame (t, sizeof *sf);
   sf->eip = switch_entry;
   sf->ebp = 0;
+
+  /* Initialize ticks_to_awke */
+  t -> ticks_to_awake = 0;
 
   /* Add to run queue. */
   thread_unblock (t);
@@ -562,6 +566,14 @@ schedule (void)
 
   ASSERT (intr_get_level () == INTR_OFF);
   ASSERT (cur->status != THREAD_RUNNING);
+
+  /* Not time to wake this 'next', get another one. */
+  while (next->ticks_to_awake < timer_ticks()) 
+    {
+      list_push_back (&ready_list, &next->elem);
+      next = next_thread_to_run ();
+    }  
+
   ASSERT (is_thread (next));
 
   if (cur != next)

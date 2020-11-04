@@ -98,6 +98,9 @@ struct thread
     uint32_t *pagedir;                  /* Page directory. */
 #endif
 
+    /*Owned by thread.c. */
+    int64_t ticks_to_awake;             /* Sleep until ticks reach this value. */
+
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
