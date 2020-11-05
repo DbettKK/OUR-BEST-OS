@@ -358,7 +358,8 @@ real_time_delay (int64_t num, int32_t denom)
 }
 
 static void 
-time_minus (struct thread *thread, void *aux UNUSED){
+time_minus (struct thread *thread, void *aux UNUSED)
+{
   /*
     判断当前线程是否为阻塞 如果为阻塞状态 则将其阻塞时间-1
     如果阻塞时间已经减为0 则将其唤醒 放入就绪队列中
