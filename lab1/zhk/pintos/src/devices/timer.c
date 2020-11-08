@@ -92,7 +92,8 @@ timer_elapsed (int64_t then)
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
-timer_sleep(int64_t ticks){
+timer_sleep(int64_t ticks)
+{
   /*
     原函数作用：
       1. 首先获取当前时间
