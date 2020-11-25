@@ -1,7 +1,7 @@
 #include "threads/init.h"
 #include <console.h>
 #include <debug.h>
-#include <inttypes.h> 
+#include <inttypes.h>
 #include <limits.h>
 #include <random.h>
 #include <stddef.h>
@@ -77,7 +77,6 @@ int
 main (void)
 {
   char **argv;
-
   /* Clear BSS. */  
   bss_init ();
 
