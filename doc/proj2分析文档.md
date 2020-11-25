@@ -61,7 +61,13 @@
 
 ### 5.3 System Calls
 
+sys_remove()：
 
+<img src=".\pics\proj2\流程图\3系统调用\sys_remove.png" alt="sys_remove流程图" style="zoom:50%;" />
+
+sys_open()：
+
+<img src=".\pics\proj2\流程图\3系统调用\sys_open.png" alt="sys_open流程图" style="zoom:50%;" />
 
 ### 5.4 Denying Writes to Executables
 
