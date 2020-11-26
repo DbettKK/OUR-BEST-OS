@@ -43,6 +43,49 @@
 
 ### 4.3 System Calls
 
+```c
+struct thread_file
+{
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+};
+struct thread
+{
+    /* Owned by thread.c. */
+    tid_t tid;                          /* Thread identifier. */
+    enum thread_status status;          /* Thread state. */
+    char name[16];                      /* Name (for debugging purposes). */
+    uint8_t *stack;                     /* Saved stack pointer. */
+    int priority;                       /* Priority. */
+    struct list_elem allelem;           /* List element for all threads list. */
+
+    /* Shared between thread.c and synch.c. */
+    struct list_elem elem;              /* List element. */
+
+#ifdef USERPROG
+    /* Owned by userprog/process.c. */
+    uint32_t *pagedir;                  /* Page directory. */
+#endif
+
+    /* Owned by thread.c. */
+    unsigned magic;  
+    /* 添加的 */
+	struct list childs;                 /* The list of childs */
+    struct child * thread_child;        /* Store the child of this thread */
+    int st_exit;                        /* Exit status */
+    struct semaphore sema;              /* Control the child process's logic, finish parent waiting for child */
+    bool success;                       /* Judge whehter the child's thread execute successfully */
+    struct thread* parent;              /* Parent thread of the thread */
+    
+    /* Structure for Task3 */
+    struct list files;                  /* List of opened files */
+    int file_fd;                        /* File's descriptor */
+    struct file * file_owned;           /* The file opened */
+
+};
+```
+
 
 
 ### 4.4 Denying Writes to Executables
@@ -68,6 +111,18 @@ sys_remove()：
 sys_open()：
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_open.png" alt="sys_open流程图" style="zoom:50%;" />
+
+sys_filesize()：
+
+<img src=".\pics\proj2\流程图\3系统调用\sys_filesize.png" alt="sys_open流程图" style="zoom:50%;" />
+
+sys_read()：
+
+<img src=".\pics\proj2\流程图\3系统调用\sys_read.png" alt="sys_open流程图" style="zoom:50%;" />
+
+sys_write()：
+
+<img src=".\pics\proj2\流程图\3系统调用\sys_write.png" alt="sys_open流程图" style="zoom:50%;" />
 
 ### 5.4 Denying Writes to Executables
 
