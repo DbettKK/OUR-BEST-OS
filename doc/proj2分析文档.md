@@ -88,7 +88,7 @@ A2: Briefly describe how you implemented argument parsing.  How do you arrange f
 
 A3: Why does Pintos implement strtok_r() but not strtok()?
 
-
+> 因为`strtok_r()`具有线程安全性而后者没有。
 
 A4: In Pintos, the kernel separates commands into a executable name and arguments.  In Unix-like systems, the shell does this separation.  Identify at least two advantages of the Unix approach.
 
