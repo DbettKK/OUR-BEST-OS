@@ -25,9 +25,160 @@
 
 ### 3.3 System Calls
 
+功能说明：
+sys_seek
+
+获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，并用file_seek函数保存文件位置，详细功能如下
+
+```c
+/* Do system seek, by calling the function file_seek() in filesystem */
+void 
+sys_seek(struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp; //获取用户栈指针
+  check_ptr2 (user_ptr + 5); //调用check_ptr2()函数判断当前调用是否合法
+  *user_ptr++; //通过用户栈指针从用户栈中取出要查找的文件的文件描述符fd
+  struct thread_file *file_temp = find_file_id (*user_ptr); //调用file_find_id函数传入此fd作为参数返回查询结果
+  if (file_temp) //找到且返回了该文件（即该文件对应的结构体）
+  {
+    acquire_lock_f (); //获取锁
+    file_seek (file_temp->file, *(user_ptr+1)); //调用file_seek()函数获取文件指针并保存文件位置
+    release_lock_f (); //释放锁
+  }
+}
+```
+
+sys_tell
+
+获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，如果找到，将结果返回到eax，未找到则将eax置为-1，详细功能如下
+
+```c
+/* Do system tell, by calling the function file_tell() in filesystem */
+void 
+sys_tell (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp; //获取用户栈指针
+  check_ptr2 (user_ptr + 1); //调用check_ptr2()函数判断当前调用是否合法
+  *user_ptr++; //通过用户栈指针从用户栈中取出要查找的文件的文件描述符fd
+  struct thread_file *thread_file_temp = find_file_id (*user_ptr); //调用file_find_id函数传入此fd作为参数返回查询结果
+  if (thread_file_temp) //找到了文件
+  {
+    acquire_lock_f (); //获取锁
+    f->eax = file_tell (thread_file_temp->file); //调用file_tell()函数返回文件位置并返回结果到eax中
+    release_lock_f (); //释放锁
+  }else{
+    f->eax = -1; //没找到，将返回值eax置为-1后返回-
+  }
+}
+
+```
+
+sys_close
+
+获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，如果找到，说明文件打开，用file_close函数关闭文件，并将文件从线程列表中移除，详细功能如下
+
+```c
+/* Do system close, by calling the function file_close() in filesystem */
+void 
+sys_close (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp; //获取用户栈指针
+  check_ptr2 (user_ptr + 1); //调用check_ptr2()函数判断当前调用是否合法
+  *user_ptr++; //通过用户栈指针从用户栈中取出要查找的文件的文件描述符fd
+  struct thread_file * opened_file = find_file_id (*user_ptr);//调用file_find_id函数传入此fd作为参数返回查询结果
+  if (opened_file)//找到了该文件
+  {
+    acquire_lock_f ();//获取锁
+    file_close (opened_file->file); //调用file_close()函数关闭文件
+    release_lock_f (); //释放锁
+    /* Remove the opened file from the list */
+    list_remove (&opened_file->file_elem);//将该文件从线程列表中移除
+    /* Free opened files */
+    free (opened_file);//释放该文件
+  }
+}
+```
+
 
 
 ### 3.4 Denying Writes to Executables
+功能说明：
+file.c
+
+file_deny_write:
+
+通过改变file中deny_write的bool值为true使其在打开后不可写
+
+同时还将inode中deny_write_node的值加1，以便后续allow_write判断
+
+file_allow_write:通过改变file中deny_write的bool值为false使文件在关闭后恢复可写
+
+同时还将inode中deny_write_node的值减1
+
+```c
+/* Prevents write operations on FILE's underlying inode
+   until file_allow_write() is called or FILE is closed. */
+void
+file_deny_write (struct file *file) 
+{
+  ASSERT (file != NULL); /*judge whether file is null*/
+  if (!file->deny_write)  /*judge the value of deny_write, which belongs to file*/
+    {
+      file->deny_write = true;  /*ensure that deny_write is true*/
+      inode_deny_write (file->inode);
+      /*call function inode_deny_write to add deny_write_node with 1*/
+    }
+}
+
+/* Re-enables write operations on FILE's underlying inode.
+   (Writes might still be denied by some other file that has the
+   same inode open.) */
+void
+file_allow_write (struct file *file) 
+{
+  ASSERT (file != NULL);/*judge whether file is null*/
+  if (file->deny_write)  /*judge the value of deny_write, which belongs to file*/
+    {
+      file->deny_write = false; /*ensure that deny_write is false*/
+      inode_allow_write (file->inode);
+      /*call function inode_deny_write to substract deny_write_node by 1*/
+    }
+}
+```
+
+inode.c
+
+inode_deny_write:
+
+将deny_write_cnt+1,同时保证deny_write_cnt<=open_cnt，保证逻辑关系为：在打开文件后禁止写入
+
+inode_allow_write:
+
+将deny_write_cnt-1,同时保证deny_write_cnt > 0，而且deny_write_cnt<=open_cnt，保证逻辑关系为：在关上文件后恢复可写入，而且原来文件状态是打开且禁止写入的
+
+```c
+/* Disables writes to INODE.
+   May be called at most once per inode opener. */
+void
+inode_deny_write (struct inode *inode) 
+{
+  inode->deny_write_cnt++; /*add deny_write_cnt with 1*/
+  ASSERT (inode->deny_write_cnt <= inode->open_cnt);
+}
+
+/* Re-enables writes to INODE.
+   Must be called once by each inode opener who has called
+   inode_deny_write() on the inode, before closing the inode. */
+void
+inode_allow_write (struct inode *inode) 
+{
+  ASSERT (inode->deny_write_cnt > 0); /*ensure deny_write_cnt is positive*/
+  ASSERT (inode->deny_write_cnt <= inode->open_cnt); 
+    /*ensure the value above is smaller than number of openers*/
+  inode->deny_write_cnt--; /*substract deny_write_cnt with 1*/
+}
+```
+
 
 
 
