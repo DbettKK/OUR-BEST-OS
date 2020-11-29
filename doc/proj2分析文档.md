@@ -124,8 +124,26 @@ sys_write()：
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_write.png" alt="sys_open流程图" style="zoom:50%;" />
 
-### 5.4 Denying Writes to Executables
+sys_seek()：
 
+<img src=".\pics\proj2\流程图\3系统调用\sys_seek.png" alt="sys_seek流程图" style="zoom:50%;" />
+
+sys_tell()：
+
+<img src=".\pics\proj2\流程图\3系统调用\sys_tell.png" alt="sys_tell流程图" style="zoom:50%;" />
+
+sys_close()：
+
+<img src=".\pics\proj2\流程图\3系统调用\sys_close.png" alt="sys_close流程图" style="zoom:50%;" />
+
+### 5.4 Denying Writes to Executables
+file_deny_write()：
+
+<img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_deny_write.png" alt="file_deny_write流程图" style="zoom:50%;" />
+
+file_allow_write()：
+
+<img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_allow_write.png" alt="file_allow_write流程图" style="zoom:50%;" />
 
 
 ## 6. 设计文档问题解答
