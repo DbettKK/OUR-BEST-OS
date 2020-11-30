@@ -187,11 +187,11 @@ inode_allow_write (struct inode *inode)
 
 ### 4.1 Process Termination Messages
 
-
+> 我们在`threads/thread.c`的`struct thread`结构中增加了`int st_exit`参数，用于保存进程退出时的状态。
 
 ### 4.2 Argument Passing
 
-
+> 在本任务中，我们没有增加新的数据结构。
 
 ### 4.3 System Calls
 
