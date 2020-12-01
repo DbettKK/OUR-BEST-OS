@@ -316,8 +316,6 @@ thread_exit (void)
 
   intr_disable ();
 
-  /*Print the information */
-  printf ("%s: exit(%d)\n",thread_name(), thread_current()->st_exit);
   /*Sema up the semaphore for the process*/
   thread_current ()->thread_child->store_exit = thread_current()->st_exit;
   sema_up (&thread_current()->thread_child->sema);
