@@ -499,9 +499,7 @@ A1: Copy here the declaration of each new or changed `struct' or
 
 A2: Briefly describe how you implemented argument parsing.  How do you arrange for the elements of argv[] to be in the right order? How do you avoid overflowing the stack page?
 
-> 经过对代码内容的阅读可知，在`process_execute`中提供的`file_name`中包含了文件名和参数，于是我们使用`strtok_r()`对其进行分割。在`process_execute`创建进程之后，pintos并不会直接运行可执行文件，而是进入了`start_process()`，在`start_process()`中运行了用于分配内存的`load()`函数，所以在`load()`函数之后进行了`setup_stack()`。为达成传递参数的目的，我们额外创建了`push_argument()`函数，用于处理字符串并将其压入栈中。
->
-> 然后使用`strtok_r()`对含有`argv`的`file_name`进行字符串分割，
+> 经过对代码内容的阅读可知，`process_execute`提供了`file_name`这一参数，在该参数中包含了文件名和参数，要传递参数，则首先要对其进行参数分离，所以我们引入了`strtok_r()`这个线程安全的字符串分割函数对其进行分割。为保证合适的分割时机，我们继续观察了pintos的用户进程执行逻辑：在`process_execute`创建进程之后，pintos并不会直接运行可执行文件，而是进入了`start_process()`对interrupt frame完成初始化，并运行了用于分配内存的`load()`函数，在`load()`函数之后才会对栈进行初始化`setup_stack()`。所以，我们在`load()`函数执行之后再进行字符串分割和压栈的操作。为达成传递参数的目的，我们额外创建了`push_argument()`函数，用于处理字符串并将其压入栈中，具体的逻辑可以参考对`push_argument()`函数的功能说明。
 >
 > 为保证对于参数的正确解析，我们先使用`strtok_r()`对输入值进行分割，得到`argc`的值然后把参数存储到`argv[]`数组中，然后将`argc`和`argv[]`作为参数传递给`push_argument()`，将其逆序压入栈中，这样就可以保证参数的顺序是正确的。
 
@@ -509,12 +507,13 @@ A2: Briefly describe how you implemented argument parsing.  How do you arrange f
 
 A3: Why does Pintos implement strtok_r() but not strtok()?
 
-> 因为当在多线程调用`strtok()`的情况下，最终输出的结果是不确定的。而`strtok_r()`则可以在多线程调用的情况下保证线程安全性。
+> 因为当在多线程调用`strtok()`的情况下，`strtok()`随时都可以被中断，它所使用的全局变量导致了最终输出的结果是不确定的。而`strtok_r()`所使用的`save_ptr()`指针则可以保证在多线程调用的情况下的线程安全性。
 
 A4: In Pintos, the kernel separates commands into a executable name and arguments.  In Unix-like systems, the shell does this separation.  Identify at least two advantages of the Unix approach.
 
-> 1. Unix方式比较安全可靠，因为在shell里进行命令分割不会对kernel造成更多的不良影响。
-> 2. Unix方式可以为内核减小负担。
+> 1. Unix方式比较可靠，即使shell崩溃了也不会对内核乃至整个系统的运行造成巨大影响。
+> 2. Unix方式减少了内核的不必要的功能，使得维护起来更加方便更加模块化。
+> 3. shell所具有的权限较小，即使遭受恶意攻击也不会过度影响到系统安全，具有很高的安全性。
 
 ### 6.2 System Calls
 
