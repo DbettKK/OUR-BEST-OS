@@ -67,7 +67,7 @@ process_exit (void)
 
 `tid_t process_execute (const char *file_name);`
 
-> 用于从`file_name`创建一个用于运行用户程序的新线程。返回值是新进程的ID，当线程不能被创建的时候，返回值是`TID_ERROR`。具体内容如下：
+> 用于从`file_name`创建一个用于运行用户程序的新线程。返回值是新进程的TID，当线程不能被创建的时候，返回值是`TID_ERROR`。具体内容如下：
 
 ```c
 /* Starts a new thread running a user program loaded from
@@ -78,26 +78,25 @@ tid_t
 process_execute (const char *file_name)
 {
   tid_t tid;
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
+  /* 对file_name做两个拷贝，否则caller和load()之间会有竞争。 */
   char *fn_copy = malloc(strlen(file_name)+1);
   char *fn_copy2 = malloc(strlen(file_name)+1);
   strlcpy (fn_copy, file_name, strlen(file_name)+1);
   strlcpy (fn_copy2, file_name, strlen(file_name)+1);
 
 
-  /* Create a new thread to execute FILE_NAME. */
-  char * save_ptr;
+  /* 创建一个用于执行可执行文件的新进程。 */
+  char * save_ptr;//用于存储strtok_r的字符串的数组指针
   fn_copy2 = strtok_r (fn_copy2, " ", &save_ptr);
-  tid = thread_create (fn_copy2, PRI_DEFAULT, start_process, fn_copy);
-  free (fn_copy2);
+  tid = thread_create (fn_copy2, PRI_DEFAULT, start_process, fn_copy);//创建线程
+  free (fn_copy2);//fn_copy2已经完成了使命，将其释放掉
 
-  if (tid == TID_ERROR){
-    free (fn_copy);
+  if (tid == TID_ERROR){//若创建线程失败，则报错
+    free (fn_copy);//释放掉fn_copy2
     return tid;
   }
 
-  /* Sema down the parent process, waiting for child */
+  /* 获取信号量，等待子进程结束执行 */
   sema_down(&thread_current()->sema);
   if (!thread_current()->success) return TID_ERROR;
 
@@ -109,25 +108,25 @@ process_execute (const char *file_name)
 
 `void push_argument (void **esp, int argc, int argv[]);`
 
-> 根据栈顶指针`esp`和参数数量`argc`两个参数将`argv[]`中的参数合适地放入栈中。
+> 根据栈顶指针`esp`和参数数量`argc`两个参数将`argv[]`中的参数压入栈中，具体说明请参考以下注释：
 
 ```c
 void
 push_argument (void **esp, int argc, int argv[]){
-  *esp = (int)*esp & 0xfffffffc;
+  *esp = (int)*esp & 0xfffffffc;//栈对齐
   *esp -= 4;
-  *(int *) *esp = 0;
-  for (int i = argc - 1; i >= 0; i--)
+  *(int *) *esp = 0;//首先放入一个0，防止没有参数的情况出现
+  for (int i = argc - 1; i >= 0; i--)//将参数逆序压入栈中
   {
     *esp -= 4;
     *(int *) *esp = argv[i];
   }
   *esp -= 4;
-  *(int *) *esp = (int) *esp + 4;
+  *(int *) *esp = (int) *esp + 4;//让esp指针指向新的栈顶
   *esp -= 4;
-  *(int *) *esp = argc;
+  *(int *) *esp = argc;//将argc压入栈中
   *esp -= 4;
-  *(int *) *esp = 0;
+  *(int *) *esp = 0;//将返回地址压入栈中
 }
 ```
 
@@ -135,7 +134,7 @@ push_argument (void **esp, int argc, int argv[]){
 
 `static void start_process (void *file_name_);`
 
-> 用于加载用户进程并且运行的线程函数。
+> 在本函数中，interrupt frame将会完成初始化，若初始化成功，则加载可执行文件，分离参数并且传递运行，若初始化失败，则直接退出线程。我们在这个函数中结合`push_argument()`实现了参数分割的任务，具体功能如下所示：
 
 ```c
 static void
@@ -148,7 +147,7 @@ start_process (void *file_name_)
   char *fn_copy=malloc(strlen(file_name)+1);
   strlcpy(fn_copy,file_name,strlen(file_name)+1);
 
-  /* Initialize interrupt frame and load executable. */
+  /* 初始化intr_frame并加载可执行文件. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
@@ -162,18 +161,17 @@ start_process (void *file_name_)
     int argc = 0;
     int argv[50];//由题目可知，参数的数量不会多于50个
     for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
-      if_.esp -= (strlen(token)+1);
+      if_.esp -= (strlen(token)+1);//用户栈向低地址增长，所以是减
       memcpy (if_.esp, token, strlen(token)+1);
-      argv[argc++] = (int) if_.esp;
+      argv[argc++] = (int) if_.esp;//提取参数
     }
-    push_argument (&if_.esp, argc, argv);
-    /* Record the exec_status of the parent thread's success and sema up parent's semaphore */
+    push_argument (&if_.esp, argc, argv);//将参数压入用户栈中
+    /* 将exec_status记录到父进程的success中，并且释放信号量。 */
     thread_current ()->parent->success = true;
     sema_up (&thread_current ()->parent->sema);
   }
     
-  else{//若初始化失败，则退出
-    /* Record the exec_status of the parent thread's success and sema up parent's semaphore */
+  else{//若初始化失败，则退出线程
     thread_current ()->parent->success = false;
     sema_up (&thread_current ()->parent->sema);
     thread_exit ();
