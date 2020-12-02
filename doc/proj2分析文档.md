@@ -17,11 +17,178 @@
 
 ### 3.1 Process Termination Messages
 
+#### 3.1.1 相关函数调用关系图
 
+> 由于本题目仅对`void process_exit(void)`函数进行改动，整体过程可以参考3.2.1的相关函数调用关系图。
+
+#### 3.1.2 功能说明
+
+`void process_exit (void);`
+
+> 用于释放本进程的资源，并且在此打印本题目中所要求的退出信息，详细说明如下所示。
+
+```c
+/* 释放当前进程的资源. */
+void
+process_exit (void)
+{
+  struct thread *cur = thread_current ();
+  uint32_t *pd;
+
+  /* 打印题目所要求的退出信息 */
+  printf ("%s: exit(%d)\n",cur->name, cur->st_exit);
+    
+  /* Destroy the current process's page directory and switch back
+     to the kernel-only page directory. */
+  pd = cur->pagedir;
+  if (pd != NULL)
+  {
+    /* Correct ordering here is crucial.  We must set
+        cur->pagedir to NULL before switching page directories,
+        so that a timer interrupt can't switch back to the
+        process page directory.  We must activate the base page
+        directory before destroying the process's page
+        directory, or our active page directory will be one
+        that's been freed (and cleared). */
+    cur->pagedir = NULL;
+    pagedir_activate (NULL);
+    pagedir_destroy (pd);
+  }
+}
+```
 
 ### 3.2 Argument Passing
 
+#### 3.2.1 相关函数调用关系图
 
+![Argu](.\pics\Argu.png)
+
+#### 3.2.2 功能说明
+
+`tid_t process_execute (const char *file_name);`
+
+> 用于从`file_name`创建一个用于运行用户程序的新线程。返回值是新进程的ID，当线程不能被创建的时候，返回值是`TID_ERROR`。具体内容如下：
+
+```c
+/* Starts a new thread running a user program loaded from
+   FILENAME.  The new thread may be scheduled (and may even exit)
+   before process_execute() returns.  Returns the new process's
+   thread id, or TID_ERROR if the thread cannot be created. */
+tid_t
+process_execute (const char *file_name)
+{
+  tid_t tid;
+  /* Make a copy of FILE_NAME.
+     Otherwise there's a race between the caller and load(). */
+  char *fn_copy = malloc(strlen(file_name)+1);
+  char *fn_copy2 = malloc(strlen(file_name)+1);
+  strlcpy (fn_copy, file_name, strlen(file_name)+1);
+  strlcpy (fn_copy2, file_name, strlen(file_name)+1);
+
+
+  /* Create a new thread to execute FILE_NAME. */
+  char * save_ptr;
+  fn_copy2 = strtok_r (fn_copy2, " ", &save_ptr);
+  tid = thread_create (fn_copy2, PRI_DEFAULT, start_process, fn_copy);
+  free (fn_copy2);
+
+  if (tid == TID_ERROR){
+    free (fn_copy);
+    return tid;
+  }
+
+  /* Sema down the parent process, waiting for child */
+  sema_down(&thread_current()->sema);
+  if (!thread_current()->success) return TID_ERROR;
+
+  return tid;
+}
+```
+
+
+
+`void push_argument (void **esp, int argc, int argv[]);`
+
+> 根据栈顶指针`esp`和参数数量`argc`两个参数将`argv[]`中的参数合适地放入栈中。
+
+```c
+void
+push_argument (void **esp, int argc, int argv[]){
+  *esp = (int)*esp & 0xfffffffc;
+  *esp -= 4;
+  *(int *) *esp = 0;
+  for (int i = argc - 1; i >= 0; i--)
+  {
+    *esp -= 4;
+    *(int *) *esp = argv[i];
+  }
+  *esp -= 4;
+  *(int *) *esp = (int) *esp + 4;
+  *esp -= 4;
+  *(int *) *esp = argc;
+  *esp -= 4;
+  *(int *) *esp = 0;
+}
+```
+
+
+
+`static void start_process (void *file_name_);`
+
+> 用于加载用户进程并且运行的线程函数。
+
+```c
+static void
+start_process (void *file_name_)
+{
+  char *file_name = file_name_;
+  struct intr_frame if_;
+  bool success;
+
+  char *fn_copy=malloc(strlen(file_name)+1);
+  strlcpy(fn_copy,file_name,strlen(file_name)+1);
+
+  /* Initialize interrupt frame and load executable. */
+  memset (&if_, 0, sizeof if_);
+  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+  if_.cs = SEL_UCSEG;
+  if_.eflags = FLAG_IF | FLAG_MBS;
+
+  char *token, *save_ptr;
+  file_name = strtok_r (file_name, " ", &save_ptr);
+  success = load (file_name, &if_.eip, &if_.esp);
+
+  if (success){//若初始化成功，则计算参数总数和参数的规格
+    int argc = 0;
+    int argv[50];//由题目可知，参数的数量不会多于50个
+    for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+      if_.esp -= (strlen(token)+1);
+      memcpy (if_.esp, token, strlen(token)+1);
+      argv[argc++] = (int) if_.esp;
+    }
+    push_argument (&if_.esp, argc, argv);
+    /* Record the exec_status of the parent thread's success and sema up parent's semaphore */
+    thread_current ()->parent->success = true;
+    sema_up (&thread_current ()->parent->sema);
+  }
+    
+  else{//若初始化失败，则退出
+    /* Record the exec_status of the parent thread's success and sema up parent's semaphore */
+    thread_current ()->parent->success = false;
+    sema_up (&thread_current ()->parent->sema);
+    thread_exit ();
+  }
+
+  /* Start the user process by simulating a return from an
+     interrupt, implemented by intr_exit (in
+     threads/intr-stubs.S).  Because intr_exit takes all of its
+     arguments on the stack in the form of a `struct intr_frame',
+     we just point the stack pointer (%esp) to our stack frame
+     and jump to it. */
+  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
+  NOT_REACHED ();
+}
+```
 
 ### 3.3 System Calls
 
@@ -71,7 +238,6 @@ sys_tell (struct intr_frame* f)
     f->eax = -1; //没找到，将返回值eax置为-1后返回-
   }
 }
-
 ```
 
 sys_close
@@ -187,11 +353,11 @@ inode_allow_write (struct inode *inode)
 
 ### 4.1 Process Termination Messages
 
-
+> 我们在`threads/thread.c`的`struct thread`结构中增加了`int st_exit`参数，用于保存进程退出时的状态。
 
 ### 4.2 Argument Passing
 
-
+> 在本任务中，我们没有增加新的数据结构。
 
 ### 4.3 System Calls
 
@@ -248,11 +414,23 @@ struct thread
 
 ### 5.1 Process Termination Messages
 
+`void process_exit (void);`
 
+<img src=".\pics\process_exit.png" alt="process_exit" style="zoom:67%;" />
 
 ### 5.2 Argument Passing
 
+`tid_t process_execute (const char *file_name);`
 
+<img src=".\pics\process_execute.png" alt="process_execute" style="zoom:67%;" />
+
+`void push_argument (void **esp, int argc, int argv[]);`
+
+<img src=".\pics\push_argument.png" alt="process_execute" style="zoom:67%;" />
+
+`static void start_process (void *file_name_);`
+
+<img src=".\pics\start_process.png" alt="process_execute" style="zoom:67%;" />
 
 ### 5.3 System Calls
 
@@ -278,24 +456,24 @@ sys_write()：
 
 sys_seek()：
 
-<img src=".\pics\proj2\流程图\3系统调用\sys_seek.png" alt="sys_seek流程图" style="zoom:50%;" />
+<img src=".\pics\proj2\流程图\3系统调用\sys_seek.png" alt="sys_seek流程图" style="zoom:100%;" />
 
 sys_tell()：
 
-<img src=".\pics\proj2\流程图\3系统调用\sys_tell.png" alt="sys_tell流程图" style="zoom:50%;" />
+<img src=".\pics\proj2\流程图\3系统调用\sys_tell.png" alt="sys_tell流程图" style="zoom:100%;" />
 
 sys_close()：
 
-<img src=".\pics\proj2\流程图\3系统调用\sys_close.png" alt="sys_close流程图" style="zoom:50%;" />
+<img src=".\pics\proj2\流程图\3系统调用\sys_close.png" alt="sys_close流程图" style="zoom:100%;" />
 
 ### 5.4 Denying Writes to Executables
 file_deny_write()：
 
-<img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_deny_write.png" alt="file_deny_write流程图" style="zoom:50%;" />
+<img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_deny_write.png" alt="file_deny_write流程图" style="zoom:100%;" />
 
 file_allow_write()：
 
-<img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_allow_write.png" alt="file_allow_write流程图" style="zoom:50%;" />
+<img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_allow_write.png" alt="file_allow_write流程图" style="zoom:100%;" />
 
 
 ## 6. 设计文档问题解答
@@ -307,23 +485,30 @@ file_allow_write()：
 A1: Copy here the declaration of each new or changed `struct' or
 `struct' member, global or static variable, `typedef', or enumeration.  Identify the purpose of each in 25 words or less.
 
-
+> 在进程终止消息任务的设计中，我们向`threads/thread.c`的`struct thread`中添加一个`int st_exit`，用于存储进程退出时的状态。
+>
+> 在参数传递的设计中，我们没有增加新的数据结构。
 
 #### 6.1.2 Algorithms
 
 A2: Briefly describe how you implemented argument parsing.  How do you arrange for the elements of argv[] to be in the right order? How do you avoid overflowing the stack page?
 
-
+> 经过对代码内容的阅读可知，在`process_execute`中提供的`file_name`中包含了文件名和参数，于是我们使用`strtok_r()`对其进行分割。在`process_execute`创建进程之后，pintos并不会直接运行可执行文件，而是进入了`start_process()`，在`start_process()`中运行了用于分配内存的`load()`函数，所以在`load()`函数之后进行了`setup_stack()`。为达成传递参数的目的，我们额外创建了`push_argument()`函数，用于处理字符串并将其压入栈中。
+>
+> 然后使用`strtok_r()`对含有`argv`的`file_name`进行字符串分割，
+>
+> 为保证对于参数的正确解析，我们先使用`strtok_r()`对输入值进行分割，得到`argc`的值然后把参数存储到`argv[]`数组中，然后将`argc`和`argv[]`作为参数传递给`push_argument()`，将其逆序压入栈中，这样就可以保证参数的顺序是正确的。
 
 #### 6.1.3 Rationale
 
 A3: Why does Pintos implement strtok_r() but not strtok()?
 
-
+> 因为当在多线程调用`strtok()`的情况下，最终输出的结果是不确定的。而`strtok_r()`则可以在多线程调用的情况下保证线程安全性。
 
 A4: In Pintos, the kernel separates commands into a executable name and arguments.  In Unix-like systems, the shell does this separation.  Identify at least two advantages of the Unix approach.
 
-
+> 1. Unix方式比较安全可靠，因为在shell里进行命令分割不会对kernel造成更多的不良影响。
+> 2. Unix方式可以为内核减小负担。
 
 ### 6.2 System Calls
 
