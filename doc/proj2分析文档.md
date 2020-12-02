@@ -190,11 +190,15 @@ start_process (void *file_name_)
 
 ### 3.3 System Calls
 
-功能说明：
+#### 3.3.1 相关函数调用关系图
 
-sys_seek
 
-获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，并用file_seek函数保存文件位置，详细功能如下
+
+#### 3.3.2 功能说明
+
+`sys_seek`
+
+>  获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，并用file_seek函数保存文件位置，详细功能如下：
 
 ```c
 /* Do system seek, by calling the function file_seek() in filesystem */
@@ -214,9 +218,9 @@ sys_seek(struct intr_frame* f)
 }
 ```
 
-sys_tell
+`sys_tell`
 
-获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，如果找到，将结果返回到eax，未找到则将eax置为-1，详细功能如下
+> 获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，如果找到，将结果返回到eax，未找到则将eax置为-1，详细功能如下：
 
 ```c
 /* Do system tell, by calling the function file_tell() in filesystem */
@@ -238,9 +242,9 @@ sys_tell (struct intr_frame* f)
 }
 ```
 
-sys_close
+`sys_close`
 
-获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，如果找到，说明文件打开，用file_close函数关闭文件，并将文件从线程列表中移除，详细功能如下
+> 获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，如果找到，说明文件打开，用file_close函数关闭文件，并将文件从线程列表中移除，详细功能如下
 
 ```c
 /* Do system close, by calling the function file_close() in filesystem */
@@ -267,18 +271,23 @@ sys_close (struct intr_frame* f)
 
 
 ### 3.4 Denying Writes to Executables
-功能说明：
-file.c
 
-file_deny_write:
+#### 3.4.1 相关函数调用关系图
 
-通过改变file中deny_write的bool值为true使其在打开后不可写
 
-同时还将inode中deny_write_node的值加1，以便后续allow_write判断
 
-file_allow_write:通过改变file中deny_write的bool值为false使文件在关闭后恢复可写
+#### 3.4.2 功能说明
+<file.c>
 
-同时还将inode中deny_write_node的值减1
+`file_deny_write`
+
+> 通过改变file中deny_write的bool值为true使其在打开后不可写
+>
+> 同时还将inode中deny_write_node的值加1，以便后续allow_write判断
+>
+> file_allow_write:通过改变file中deny_write的bool值为false使文件在关闭后恢复可写
+>
+> 同时还将inode中deny_write_node的值减1
 
 ```c
 /* Prevents write operations on FILE's underlying inode
@@ -311,15 +320,15 @@ file_allow_write (struct file *file)
 }
 ```
 
-inode.c
+<inode.c>
 
-inode_deny_write:
+`inode_deny_write`
 
-将deny_write_cnt+1,同时保证deny_write_cnt<=open_cnt，保证逻辑关系为：在打开文件后禁止写入
+> 将deny_write_cnt+1,同时保证deny_write_cnt<=open_cnt，保证逻辑关系为：在打开文件后禁止写入
 
-inode_allow_write:
+`inode_allow_write`
 
-将deny_write_cnt-1,同时保证deny_write_cnt > 0，而且deny_write_cnt<=open_cnt，保证逻辑关系为：在关上文件后恢复可写入，而且原来文件状态是打开且禁止写入的
+> 将deny_write_cnt-1,同时保证deny_write_cnt > 0，而且deny_write_cnt<=open_cnt，保证逻辑关系为：在关上文件后恢复可写入，而且原来文件状态是打开且禁止写入的
 
 ```c
 /* Disables writes to INODE.
@@ -440,44 +449,44 @@ struct child
 
 ### 5.3 System Calls
 
-sys_remove()：
+`sys_remove()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_remove.png" alt="sys_remove流程图" style="zoom:50%;" />
 
-sys_open()：
+`sys_open()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_open.png" alt="sys_open流程图" style="zoom:50%;" />
 
-sys_filesize()：
+`sys_filesize()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_filesize.png" alt="sys_open流程图" style="zoom:50%;" />
 
-sys_read()：
+`sys_read()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_read.png" alt="sys_open流程图" style="zoom:50%;" />
 
-sys_write()：
+`sys_write()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_write.png" alt="sys_open流程图" style="zoom:50%;" />
 
-sys_seek()：
+`sys_seek()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_seek.png" alt="sys_seek流程图" style="zoom:100%;" />
 
-sys_tell()：
+`sys_tell()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_tell.png" alt="sys_tell流程图" style="zoom:100%;" />
 
-sys_close()：
+`sys_close()`
 
 <img src=".\pics\proj2\流程图\3系统调用\sys_close.png" alt="sys_close流程图" style="zoom:100%;" />
 
 ### 5.4 Denying Writes to Executables
-file_deny_write()：
+`file_deny_write()`
 
 <img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_deny_write.png" alt="file_deny_write流程图" style="zoom:100%;" />
 
-file_allow_write()：
+`file_allow_write()`
 
 <img src=".\pics\proj2\流程图\4拒绝写入可执行文件\file_allow_write.png" alt="file_allow_write流程图" style="zoom:100%;" />
 
