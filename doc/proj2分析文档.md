@@ -402,6 +402,14 @@ struct thread
     struct file * file_owned;           /* The file opened */
 
 };
+struct child
+{
+    tid_t tid;                           /* tid of the thread */
+    bool isrun;                          /* whether the child's thread is run successfully */
+    struct list_elem child_elem;         /* list of children */
+    struct semaphore sema;               /* semaphore to control waiting */
+    int store_exit;                      /* the exit status of child thread */
+};
 ```
 
 
@@ -517,7 +525,43 @@ A4: In Pintos, the kernel separates commands into a executable name and argument
 B1: Copy here the declaration of each new or changed `struct' or
 `struct' member, global or static variable, `typedef', or enumeration.  Identify the purpose of each in 25 words or less.
 
+创建了一个child的struct，用于描述子进程。
+
+```c
+struct child
+{
+    tid_t tid;                           /* tid of the thread */
+    bool isrun;                          /* whether the child's thread is run successfully */
+    struct list_elem child_elem;         /* list of children */
+    struct semaphore sema;               /* semaphore to control waiting */
+    int store_exit;                      /* the exit status of child thread */
+};
+```
+
+在thread结构体中新加入了一些成员，用于更好的在系统调用中使用thread
+
+```c
+struct list childs;                 /* The list of childs */
+struct child * thread_child;        /* Store the child of this thread */
+int st_exit;                        /* Exit status */
+struct semaphore sema;              /* Control the child process's logic, finish parent waiting for child */
+bool success;                       /* Judge whehter the child's thread execute successfully */
+struct thread* parent;              /* Parent thread of the thread */
+```
+
+我们还创建一个结构体thread_file用于描述进程打开的文件
+
+```c
+struct thread_file{
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+};
+```
+
 B2: Describe how file descriptors are associated with open files. Are file descriptors unique within the entire OS or just within a single process?
+
+
 
 #### 6.2.2 Algorithms
 
