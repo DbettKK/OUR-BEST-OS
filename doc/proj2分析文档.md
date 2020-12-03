@@ -387,6 +387,165 @@ sys_create(struct intr_frame* f)
 }
 ```
 
+`sys_remove`
+
+>  获取用户栈指针，在判断调用是否合法后取出文件名，然后获取锁，并通过调用filesys_remove函数进行删除，获得返回值返回给用户，并释放锁，详细功能如下：
+
+```c
+/* Do system remove, by calling the method filesys_remove */
+void 
+sys_remove(struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  acquire_lock_f ();
+  f->eax = filesys_remove ((const char *)*user_ptr);
+  release_lock_f ();
+}
+}
+```
+
+`sys_open`
+
+>  获取用户栈指针，在判断调用是否合法后取出文件名，然后获取锁，并通过调用filesys_opened函数进行尝试打开文件，如果成功获得文件描述符fd，否则则为空，然后释放锁，对之前文件打开结果进行判断，如果打开成功，则将其加入到当前进程锁打开的文件中，然后将文件描述符作为返回值返回给用户，如果打开失败则返回-1，详细功能如下：
+
+```c
+/* Do system open, open file by the function filesys_open */
+void 
+sys_open (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  acquire_lock_f ();
+  struct file * file_opened = filesys_open((const char *)*user_ptr);
+  release_lock_f ();
+  struct thread * t = thread_current();
+  if (file_opened)
+  {
+    struct thread_file *thread_file_temp = malloc(sizeof(struct thread_file));
+    thread_file_temp->fd = t->file_fd++;
+    thread_file_temp->file = file_opened;
+    list_push_back (&t->files, &thread_file_temp->file_elem);
+    f->eax = thread_file_temp->fd;
+  } 
+  else
+  {
+    f->eax = -1;
+  }
+}
+```
+
+`sys_filesize`
+
+>  获取用户栈指针，在判断调用是否合法后取出文件描述符，在文件列表中查找文件位置，并用thread_file_temp变量进行暂时保存，然后如果找到了该文件，则获取锁，并通过file_length函数获取该文件大小，并作为返回值返回给用户然后释放锁，如果在文件列表中未找到，则返回-1，详细功能如下：
+
+```c
+/* Do system filesize, by calling the function file_length() in filesystem */
+void 
+sys_filesize (struct intr_frame* f){
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  struct thread_file * thread_file_temp = find_file_id (*user_ptr);
+  if (thread_file_temp)
+  {
+    acquire_lock_f ();
+    f->eax = file_length (thread_file_temp->file);
+    release_lock_f ();
+  } 
+  else
+  {
+    f->eax = -1;
+  }
+}
+```
+
+`sys_read`
+
+>  获取用户栈指针，在判断调用是否合法后，取出文件描述符、缓冲区、读的size三个参数，然后对这三个参数验证合法性，然后判断该fd是否为0，即判断是否从标准输入中读入，如果为0，则调用input_getc在标准输入中读入信息，并用buffer存储，并将读取的size作为返回值返回给用户，如果fd不为0，则根据fd从文件列表中找到对应文件，并返回对应文件结构体，然后如果找到了该文件描述符对应的文件，则获取锁，并调用file_read函数从文件中读取size大小的信息，并将其作为返回值返回，然后释放锁；如果没有找到该文件，则返回-1，详细功能如下：
+
+```c
+/* Do system read, by calling the function file_tell() in filesystem */
+void 
+sys_read (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  /* PASS the test bad read */
+  *user_ptr++;
+  /* We don't konw how to fix the bug, just check the pointer */
+  int fd = *user_ptr;
+  int i;
+  uint8_t * buffer = (uint8_t*)*(user_ptr+1);
+  off_t size = *(user_ptr+2);
+  if (!is_valid_pointer (buffer, 1) || !is_valid_pointer (buffer + size,1)){
+    exit_special ();
+  }
+  /* get the files buffer */
+  if (fd == 0) 
+  {
+    for (i = 0; i < size; i++)
+      buffer[i] = input_getc();
+    f->eax = size;
+  }
+  else
+  {
+    struct thread_file * thread_file_temp = find_file_id (*user_ptr);
+    if (thread_file_temp)
+    {
+      acquire_lock_f ();
+      f->eax = file_read (thread_file_temp->file, buffer, size);
+      release_lock_f ();
+    } 
+    else
+    {
+      f->eax = -1;
+    }
+  }
+}
+```
+
+`sys_write`
+
+>  获取用户栈指针，在判断调用是否合法后，取出文件描述符、缓冲区、读的size三个参数，然后对这三个参数验证合法性，然后判断该fd是否为1，即判断是否将buffer中内容输出到标准输出中，如果为1，则调用putbuf将buffer中size大小的数据输出到标准输出，并将写出的size作为返回值返回给用户，如果fd不为1，则根据fd从文件列表中找到对应文件，并返回对应文件结构体，然后如果找到了该文件描述符对应的文件，则获取锁，并调用file_write函数将buffer中size大小的信息写入到文件，并将size作为返回值返回，然后释放锁；如果没有找到该文件，则返回-1，详细功能如下：
+
+```c
+/* Do system write, Do writing in stdout and write in files */
+void 
+sys_write (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 7);
+  check_ptr2 (*(user_ptr + 6));
+  *user_ptr++;
+  int temp2 = *user_ptr;
+  const char * buffer = (const char *)*(user_ptr+1);
+  off_t size = *(user_ptr+2);
+  if (temp2 == 1) {
+    /* Use putbuf to do testing */
+    putbuf(buffer,size);
+    f->eax = size;
+  }
+  else
+  {
+    /* Write to Files */
+    struct thread_file * thread_file_temp = find_file_id (*user_ptr);
+    if (thread_file_temp)
+    {
+      acquire_lock_f ();
+      f->eax = file_write (thread_file_temp->file, buffer, size);
+      release_lock_f ();
+    } 
+    else
+    {
+      f->eax = -1;
+    }
+  }
+}
+```
 
 `sys_seek`
 
@@ -611,7 +770,52 @@ struct child
 };
 ```
 
+> 在本task中，我们在实验原有代码的基础上增加了以上所示的数据结构，然后对每个数据结构进行一些分析。
 
+> 首先是对于**thread_file**结构体，其主要功能是用于表示每个进程所打开的文件；其中**fd**成员是文件描述符，也就是每个文件所唯一对应的一个int值，可以唯一描述一个文件；然后**file**成员则是使用了**filesys.h**中所定义的file结构体，其中包含**inode**等信息，具体这里不再赘述，也是用于描述一个文件所必须的信息；然后**file_elem**成员则是为了让该结构体能够正常放入**List**所增加的成员，实际并无太大意义，可以通过**thread**中的**files**成员来遍历某进程所打开的所有文件
+>
+> 总的来说就是方便在系统调用中和文件相关的操作能够更加方便且创建该结构体也是必要的。
+
+```c
+struct thread_file
+{
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+};
+```
+
+> 然后是在thread函数体中所添加的一些成员，如下所示；
+>
+> 首先对于childs，是一个列表，存放该进程的所有子进程，其中child结构体也会在之后说到，用于描述进程的子进程，childs则是存放进程子进程的列表；然后thread_child和parent则是用于存放该进程的当前直接子进程和父进程，在程序执行时也是不断变化的；然后是st_exit成员，该成员是描述进程的返回状态的，在task1中已经介绍的比较详细，即存放进程的退出状态；然后对于sema成员，其类型是信号量，主要功能则是控制子进程的逻辑，在父进程等待子进程中用于进程之间通信；然后是一个布尔变量success，用于描述子进程是否成功返回；然后是上文提到过的files，存放该文件所打开的所有文件的列表，并且在通过fd找对应文件时也会频繁用到，file_fd则描述某个文件的文件描述符，用于存放某一时刻该进程所对应文件的文件描述符；最后则是file_owned，描述其某时刻所拥有的文件。
+
+```c
+struct list childs;                 /* The list of childs */
+struct child * thread_child;        /* Store the child of this thread */
+int st_exit;                        /* Exit status */
+struct semaphore sema;              /* Control the child process's logic, finish parent waiting for child */
+bool success;                       /* Judge whehter the child's thread execute successfully */
+struct thread* parent;              /* Parent thread of the thread */
+
+struct list files;                  /* List of opened files */
+int file_fd;                        /* File's descriptor */
+struct file * file_owned;           /* The file opened */
+```
+
+>最后则是用于描述子进程的结构体child，如下所示：
+>
+>对于第一个成员tid，则是该子进程的tid，与进程唯一对应；然后是isrun布尔变量，描述该子进程是否成功执行；然后child_elem成员则是让该结构体能够被放入List列表中，即thread结构体中从childs结构体，方便遍历等操作，然后是信号量sema用于控制waiting以及唤醒，最后则是store_exit，和thread结构体内的成员一样，用于描述该进程的返回状态。
+
+```c
+struct child
+{
+    tid_t tid;                           /* tid of the thread */
+    bool isrun;                          /* whether the child's thread is run successfully */
+    struct list_elem child_elem;         /* list of children */
+    struct semaphore sema;               /* semaphore to control waiting */
+    int store_exit;                      /* the exit status of child thread */
+};
+```
 
 ### 4.4 Denying Writes to Executables
 
