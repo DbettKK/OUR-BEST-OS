@@ -985,7 +985,38 @@ B1: Copy here the declaration of each new or changed `struct' or
 
 B2: Describe how file descriptors are associated with open files. Are file descriptors unique within the entire OS or just within a single process?
 
-
+> 与文件相关的几个数据结构如下：
+>
+> ``` c
+> struct file 
+>  {
+>    struct inode *inode;        /* File's inode. */
+>    off_t pos;                  /* Current position. */
+>    bool deny_write;            /* Has file_deny_write() been called? */
+>  };
+> ```
+>
+> ``` c
+> struct inode 
+>   {
+>     struct list_elem elem;              /* Element in inode list. */
+>     block_sector_t sector;              /* Sector number of disk location. */
+>     int open_cnt;                       /* Number of openers. */
+>     bool removed;                       /* True if deleted, false otherwise. */
+>     int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+>     struct inode_disk data;             /* Inode content. */
+>   };
+> ```
+> 
+> 其中，struct file 变量是某线程所持有的，仅在线程范围内是独有的；而 struct inode 变量是操作系统维护、与实际的文件一一对应、整个操作系统范围内是不重复的。
+> 
+> 通过打开文件的调用过程不难看出这一点，整个调用流程大致如下
+>
+> ```
+> 用户程序 ==> open() ==> sys_open() ==> filesys_open() ==> dir_lookup() ==> inode_open() ==> file_open (inode)
+> ```
+>
+> 整个打开文件的核心都围绕着 inode 的操作展开，并且在 `inode_open()` 中对目标文件是否已经被打开过进行了判断，印证了 struct inode 变量在操作系统范围内唯一。而最终取到 inode 后，即可执行 `file_open()`，并无限制，多个线程在流程中取得同一 inode 后，也可以通过相同的方式创建相同的 struct file 变量。
 
 #### 6.2.2 Algorithms
 
