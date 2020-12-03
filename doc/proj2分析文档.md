@@ -295,73 +295,94 @@ sys_halt (struct intr_frame* f)
 
 `sys_exit`
 
-> 终止当前用户程序的执行，并将状态码返回给内核。
+> 终止当前用户程序的执行。程序执行时栈的情况和详细的流程如下：
 
 ``` c
+//                    +----------------+
+//                    |     status     |
+// stack pointer -->  | return address |
+//                    +----------------+
+//
 /* Do sytem exit */
 void 
 sys_exit (struct intr_frame* f)
 {
-  uint32_t *user_ptr = f->esp;
-  check_ptr2 (user_ptr + 1);
-  *user_ptr++;
+  uint32_t *user_ptr = f->esp;    // 取出栈顶指针
+  check_ptr2 (user_ptr + 1);      // 检查合法性
+  *user_ptr++;      // 指针指向退出码
   /* record the exit status of the process */
-  thread_current()->st_exit = *user_ptr;
-  thread_exit ();
+  thread_current()->st_exit = *user_ptr;  // 保存退出码
+  thread_exit ();     // 线程退出
 }
 ```
 
 
 `sys_exec`
 
-> 执行可执行文件，并返回新线程的 pid
+> 执行可执行文件，并返回新线程的 pid。程序执行时栈的情况和详细的流程如下：
 
 ``` c
+//                    +----------------+
+//                    |      file      |
+// stack pointer -->  | return address |
+//                    +----------------+
+//
 /* Do sytem exec */
 void 
 sys_exec (struct intr_frame* f)
 {
-  uint32_t *user_ptr = f->esp;
-  check_ptr2 (user_ptr + 1);
+  uint32_t *user_ptr = f->esp;    // 取出栈顶指针
+  check_ptr2 (user_ptr + 1);      // 检查合法性
   check_ptr2 (*(user_ptr + 1));
-  *user_ptr++;
-  f->eax = process_execute((char*)* user_ptr);
+  *user_ptr++;    // 指针指向待执行的文件
+  f->eax = process_execute((char*)* user_ptr);    // 执行程序，利用 eax 寄存器返回 pid
 }
 ```
 
 
 `sys_wait`
 
->
+> 等待指定线程退出，并返回其退出的状态码。程序执行时栈的情况和详细的流程如下：
 
 ``` c
+//                    +----------------+
+//                    |      pid       |
+// stack pointer -->  | return address |
+//                    +----------------+
+//
 /* Do sytem wait */
 void 
 sys_wait (struct intr_frame* f)
 {
-  uint32_t *user_ptr = f->esp;
-  check_ptr2 (user_ptr + 1);
-  *user_ptr++;
-  f->eax = process_wait(*user_ptr);
+  uint32_t *user_ptr = f->esp;    // 取出栈顶指针
+  check_ptr2 (user_ptr + 1);      // 检查合法性
+  *user_ptr++;    // 指针指向 pid
+  f->eax = process_wait(*user_ptr);     // 调用功能函数
 }
 ```
 
 
 `sys_create`
 
-> 
+> 根据传入的参数，创建新的文件，并返回结果。程序执行时栈的情况和详细的流程如下：
 
 ``` c
+//                    +----------------+
+//                    |  initial_size  |
+//                    |      file      |
+// stack pointer -->  | return address |
+//                    +----------------+
+//
 /* Do sytem create, we need to acquire lock for file operation in the following methods when do file operation */
 void 
 sys_create(struct intr_frame* f)
 {
-  uint32_t *user_ptr = f->esp;
-  check_ptr2 (user_ptr + 5);
+  uint32_t *user_ptr = f->esp;      // 取出栈顶指针
+  check_ptr2 (user_ptr + 5);        // 检查合法性
   check_ptr2 (*(user_ptr + 4));
-  *user_ptr++;
+  *user_ptr++;      // 指针指向文件名
   acquire_lock_f ();
-  f->eax = filesys_create ((const char *)*user_ptr, *(user_ptr+1));
+  f->eax = filesys_create ((const char *)*user_ptr, *(user_ptr+1));   // 调用功能函数并在 eax 中返回结果
   release_lock_f ();
 }
 ```
