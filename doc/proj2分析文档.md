@@ -819,6 +819,43 @@ struct child
 
 ### 4.4 Denying Writes to Executables
 
+file.c
+
+```c
+/* An open file. */
+struct file 
+  {
+    struct inode *inode;        /* File's inode. */
+    off_t pos;                  /* Current position. */
+    bool deny_write;            /* Has file_deny_write() been called? */
+  };
+```
+
+对于结构体file而言，其数据结构中包含一个inode以及负责存贮其目前位置的off_t值 pos，另外，其bool值deny_write用来表述一个文件是否被调用类file_deny_write()函数（即出于可执行不可写阶段）
+
+对于inode结构体的详述如下：
+
+
+
+inode.c
+
+```c
+/* In-memory inode. */
+struct inode 
+  {
+    struct list_elem elem;              /* Element in inode list. */
+    block_sector_t sector;              /* Sector number of disk location. */
+    int open_cnt;                       /* Number of openers. */
+    bool removed;                       /* True if deleted, false otherwise. */
+    int deny_write_cnt;                 /* 0: writes ok, >0: deny writes. */
+    struct inode_disk data;             /* Inode content. */
+  };
+
+```
+
+inode结构体中，与file_deny_write() 和 file_allow_write()有关联的项主要为int类数据open_cnt 和deny_write_cnt，其中前者用来表述文件打开的次数，用于和后者比较：只有在deny_write_cnt > 0同时deny_write_cnt <= open_cnt时，才能恢复可写状态。后者则在file_deny_write() 和 file_allow_write()中被用于+1或-1以表述文件此时的状态
+
+
 
 
 ## 5. 相关函数流程图分析说明
