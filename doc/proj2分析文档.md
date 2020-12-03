@@ -11,7 +11,7 @@
 
 ## 2. 所分析代码通过测试用例情况
 
-![proj2](.\pics\proj2.png)
+![proj2](./pics/proj2.png)
 
 ## 3. 相关函数调用关系图以及功能说明
 
@@ -61,7 +61,7 @@ process_exit (void)
 
 #### 3.2.1 相关函数调用关系图
 
-![Argu](.\pics\Argu.png)
+![Argu](./pics/Argu.png)
 
 #### 3.2.2 功能说明
 
@@ -192,9 +192,178 @@ start_process (void *file_name_)
 
 #### 3.3.1 相关函数调用关系图
 
+本部分中的函数实现了不同的系统调用，仅展示共通的调用流程，详细说明见下节；
 
+![系统调用的总体流程](./pics/proj2/流程图/3系统调用/syscall.png)
 
 #### 3.3.2 功能说明
+
+##### 3.3.2.1 初始化
+
+在系统初始化过程中，`init.c` 中的 `main()` 函数调用了 `syscall_init()` 函数，对系统调用功能进行了初始化，其中进行的工作如下：
+
+``` c
+void
+syscall_init (void) 
+{
+  intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+  /* Our implementation for Task2: initialize halt,exit,exec */
+  syscalls[SYS_HALT] = &sys_halt;
+  syscalls[SYS_EXIT] = &sys_exit;
+  syscalls[SYS_EXEC] = &sys_exec;
+  /* Our implementation for Task3: initialize create, remove, open, filesize, read, write, seek, tell, and close */
+  syscalls[SYS_WAIT] = &sys_wait;
+  syscalls[SYS_CREATE] = &sys_create;
+  syscalls[SYS_REMOVE] = &sys_remove;
+  syscalls[SYS_OPEN] = &sys_open;
+  syscalls[SYS_WRITE] = &sys_write;
+  syscalls[SYS_SEEK] = &sys_seek;
+  syscalls[SYS_TELL] = &sys_tell;
+  syscalls[SYS_CLOSE] =&sys_close;
+  syscalls[SYS_READ] = &sys_read;
+  syscalls[SYS_FILESIZE] = &sys_filesize;
+}
+```
+
+函数中调用了 `intr_register_int()` 函数，将 0x30 中断处理程序设置为了 `syscall_handler()` 函数，命名为 `syscall`，调用时中断状态为 `INTR_ON`。
+
+##### 3.3.2.2 系统调用的触发过程
+
+系统调用主要由用户程序发起。在 `/lib/user/syscall.c` 中给出了供用户程序调用的系统调用函数，如 `halt()`，`exit()` 等，其中主要的工作为使用相应的参数调用 `syscall0` 或 `syscall1` 或 `syscall2` 或 `syscall3` 宏函数，其区别为接受的参数的数量，实际功能基本相同，在此部分分析中用 `syscall宏` 代指上述四个宏函数。以 `syscall0` 为例，其完成的工作为：
+
+``` c
+/* Invokes syscall NUMBER, passing no arguments, and returns the
+   return value as an `int'. */
+#define syscall0(NUMBER)                                        \
+        ({                                                      \
+          int retval;                                           \
+          asm volatile                                          \
+            ("pushl %[number]; int $0x30; addl $4, %%esp"       \
+               : "=a" (retval)                                  \
+               : [number] "i" (NUMBER)                          \
+               : "memory");                                     \
+          retval;                                               \
+        })
+```
+
+其中的核心功能由内联汇编完成：
+
+``` x86asm
+pushl $number;       # 将参数入栈
+int $0x30;           # 根据中断向量表 0x30 项，修改 CS 和 IP，跳转到中断处理程序入口
+addl $4, %%esp;
+```
+
+其主要功能为触发 0x30 中断，在这里，number 标识了用户程序调用了哪一个系统调用。参见上文系统调用的初始化，在 `syscall_init()` 中，中断处理程序被设置为了 `syscall_handler()` 函数，其完成的工作如下：
+
+``` c
+static void
+syscall_handler (struct intr_frame *f UNUSED)
+{
+  /* For Task2 practice, just add 1 to its first argument, and print its result */
+  int * p = f->esp;
+  check_ptr2 (p + 1);
+  int type = * (int *)f->esp;
+  if(type <= 0 || type >= max_syscall){
+    exit_special ();
+  }
+  syscalls[type](f);
+}
+```
+
+函数从中断帧中取出在 `syscall宏` 保存的 `number`，并根据其值调用相应的系统调用处理函数，各处理函数的功能如下节。
+
+##### 3.3.2.2 系统调用中各处理函数的功能说明
+
+`sys_halt`
+
+> 根据题目描述，函数通过调用定义在 `devices/shutdown.h` 中的 `shutdown_power_off()` 函数，终止 Pintos 的运行。函数的实现较为简单，直接调用提供的函数即可：
+
+``` c
+/* Do sytem halt */
+void 
+sys_halt (struct intr_frame* f)
+{
+  shutdown_power_off();     // 直接调用已有函数
+}
+```
+
+![sys_halt() 函数的调用情况](./pics/proj2/流程图/3系统调用/sys_halt.png)
+
+
+`sys_exit`
+
+> 终止当前用户程序的执行，并将状态码返回给内核。
+
+``` c
+/* Do sytem exit */
+void 
+sys_exit (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  /* record the exit status of the process */
+  thread_current()->st_exit = *user_ptr;
+  thread_exit ();
+}
+```
+
+
+`sys_exec`
+
+> 执行可执行文件，并返回新线程的 pid
+
+``` c
+/* Do sytem exec */
+void 
+sys_exec (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  f->eax = process_execute((char*)* user_ptr);
+}
+```
+
+
+`sys_wait`
+
+>
+
+``` c
+/* Do sytem wait */
+void 
+sys_wait (struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  f->eax = process_wait(*user_ptr);
+}
+```
+
+
+`sys_create`
+
+> 
+
+``` c
+/* Do sytem create, we need to acquire lock for file operation in the following methods when do file operation */
+void 
+sys_create(struct intr_frame* f)
+{
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 5);
+  check_ptr2 (*(user_ptr + 4));
+  *user_ptr++;
+  acquire_lock_f ();
+  f->eax = filesys_create ((const char *)*user_ptr, *(user_ptr+1));
+  release_lock_f ();
+}
+```
+
 
 `sys_seek`
 
@@ -396,7 +565,7 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;  
     /* 添加的 */
-	struct list childs;                 /* The list of childs */
+    struct list childs;                 /* The list of childs */
     struct child * thread_child;        /* Store the child of this thread */
     int st_exit;                        /* Exit status */
     struct semaphore sema;              /* Control the child process's logic, finish parent waiting for child */
