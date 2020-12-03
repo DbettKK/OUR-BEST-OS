@@ -227,6 +227,8 @@ syscall_init (void)
 
 函数中调用了 `intr_register_int()` 函数，将 0x30 中断处理程序设置为了 `syscall_handler()` 函数，命名为 `syscall`，调用时中断状态为 `INTR_ON`。
 
+此外，为了在 `syscall_handler()` 函数被调用时，能够正确调用需要的系统调用处理函数，还维护了一个函数指针数组 `syscalls[]`，根据相应的系统调用的编号即可获取到对应的处理函数，数组在此处进行了初始化。
+
 ##### 3.3.2.2 系统调用的触发过程
 
 系统调用主要由用户程序发起。在 `/lib/user/syscall.c` 中给出了供用户程序调用的系统调用函数，如 `halt()`，`exit()` 等，其中主要的工作为使用相应的参数调用 `syscall0` 或 `syscall1` 或 `syscall2` 或 `syscall3` 宏函数，其区别为接受的参数的数量，实际功能基本相同，在此部分分析中用 `syscall宏` 代指上述四个宏函数。以 `syscall0` 为例，其完成的工作为：
@@ -254,16 +256,16 @@ int $0x30;           # 根据中断向量表 0x30 项，修改 CS 和 IP，跳�
 addl $4, %%esp;
 ```
 
-其主要功能为触发 0x30 中断，在这里，number 标识了用户程序调用了哪一个系统调用。参见上文系统调用的初始化，在 `syscall_init()` 中，中断处理程序被设置为了 `syscall_handler()` 函数，其完成的工作如下：
+其主要功能为触发 0x30 中断，在这里，number 标识了用户程序调用了哪一个系统调用。参见上文系统调用的初始化，在 `syscall_init()` 中，0x30 中断处理程序被设置为了 `syscall_handler()` 函数，其完成的工作如下：
 
 ``` c
 static void
 syscall_handler (struct intr_frame *f UNUSED)
 {
   /* For Task2 practice, just add 1 to its first argument, and print its result */
-  int * p = f->esp;
-  check_ptr2 (p + 1);
-  int type = * (int *)f->esp;
+  int * p = f->esp;       // 取出栈顶指针
+  check_ptr2 (p + 1);     // 检查引用是否合法
+  int type = * (int *)f->esp;     // 栈顶保存的是系统调用的编号
   if(type <= 0 || type >= max_syscall){
     exit_special ();
   }
@@ -271,7 +273,7 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 ```
 
-函数从中断帧中取出在 `syscall宏` 保存的 `number`，并根据其值调用相应的系统调用处理函数，各处理函数的功能如下节。
+函数从栈中取出在 `syscall宏` 保存的 `number`，并根据其值调用相应的系统调用处理函数，各处理函数的功能如下节。
 
 ##### 3.3.2.2 系统调用中各处理函数的功能说明
 
