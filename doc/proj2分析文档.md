@@ -625,7 +625,9 @@ sys_close (struct intr_frame* f)
 
 #### 3.4.1 相关函数调用关系图
 
+![关系图1](./pics/4关系图1.png)
 
+![关系图2](./pics/4关系图2.png)
 
 #### 3.4.2 功能说明
 <file.c>
