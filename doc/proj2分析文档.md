@@ -357,7 +357,42 @@ sys_wait (struct intr_frame* f)
   uint32_t *user_ptr = f->esp;    // 取出栈顶指针
   check_ptr2 (user_ptr + 1);      // 检查合法性
   *user_ptr++;    // 指针指向 pid
-  f->eax = process_wait(*user_ptr);     // 调用功能函数
+  f->eax = process_wait(*user_ptr);     // 函数功能见下
+}
+
+/* Our Implementation
+Modify Process wait to satisfy some special test in Task1 and also some bugs in other Tasks */
+int
+process_wait (tid_t child_tid UNUSED)
+{
+  /* Find the child's ID that the current thread waits for and sema down the child's semaphore */
+  struct list *l = &thread_current()->childs;     // 指向当前线程的 child 列表
+  struct list_elem *temp;
+  temp = list_begin (l);      // 指向 child 列表的第一项
+  struct child *temp2 = NULL;
+  while (temp != list_end (l))    // child 列表不为空
+  {
+    temp2 = list_entry (temp, struct child, child_elem);      // 将 list_elem 指针转换为 child 指针
+    if (temp2->tid == child_tid)      // 如果当前指针指向的进程是需要等待的进程
+    {
+      if (!temp2->isrun)      // 如果还没有对该线程执行此操作
+      {
+        temp2->isrun = true;
+        sema_down (&temp2->sema);     // 通过信号量实现对进程的等待
+        break;
+      } 
+      else      // 重复操作 直接返回 -1
+      {
+        return -1;
+      }
+    }
+    temp = list_next (temp);    // 当前进程不是要等待的，查看下一个
+  }
+  if (temp == list_end (l)) {       // child 列表为空 直接返回 -1
+    return -1;
+  }
+  list_remove (temp);
+  return temp2->store_exit;     // 返回退出值
 }
 ```
 
@@ -1061,15 +1096,19 @@ B2: Describe how file descriptors are associated with open files. Are file descr
 
 B3: Describe your code for reading and writing user data from the kernel.
 
-
+> 涉及内核的读写由系统调用 `read()` 和 `write()` 实现，其中的核心功能在 `sys_read()` 和 `sys_write()` 中进行。
+> 
+> 用户程序调用 `read()` 以执行读操作，`read()` 函数调用 `syscall 宏`，将 file_id、buffer 指针和读取长度 size 压入栈中，将控制交给 `sys_read()`。首先检查栈中的指针的合法性，如果 file_id 为 0，表示从标准输入中读入，则调用 `input_getc()` 函数，向 buffer 中读入；如果 file_id 非 0，则调用 `find_file_id()` 查找到当前 id 对应的文件，取得锁后调用 `file_read()` 进行文件的读取，返回值装入 eax ，释放锁，完成整个读取的操作。
+> 
+> 用户程序调用 `write()` 函数以执行写操作，`write()` 函数调用 `syscall 宏`，将 file_id、buffer 指针和写入长度 size 压入栈中，将控制交给 `sys_write()`。首先检查栈中指针的合法性，如果 file_id 为 1，表示向标准输出写入，则调用 `putbuf()` 函数，将  buffer 中的内容写入标准输出；如果 file_id 非 1，则调用 `find_file_id()` 查找到当前 id 对应的文件，取得锁后调用 `file_write()` 进行文件的写入，返回值装入 eax ，释放锁，完成整个写入的操作。
 
 B4: Suppose a system call causes a full page (4,096 bytes) of data to be copied from user space into the kernel.  What is the least and the greatest possible number of inspections of the page table (e.g. calls to pagedir_get_page()) that might result?  What about for a system call that only copies 2 bytes of data?  Is there room for improvement in these numbers, and how much?
 
-
+TODO
 
 B5: Briefly describe your implementation of the "wait" system call and how it interacts with process termination.
 
-
+> 用户程序调用 `wait()` 后，`wait()` 将要等待的进程 pid 压入栈中，`sys_wait()` 取得控制后，首先检查内存访问和指针的合法性，然后调用 `process_wait()` 函数。在 `process_wait()` 函数中，首先在当前线程的子进程列表中查找匹配项，找到后对信号量进行 P 操作，如果进程已经退出，在退出过程中会对同一信号量进行 V 操作，将顺利取得信号量，返回进程的退出码；否则将在信号量的 P 操作中对当前线程进行阻塞，直到要等待的进程退出，并执行了 V 操作，`process_wait()` 函数才继续执行。
 
 B6: Any access to user program memory at a user-specified address can fail due to a bad pointer value.  Such accesses must cause the process to be terminated.  System calls are fraught with such accesses, e.g. a "write" system call requires reading the system call number from the user stack, then each of the call's three arguments, then an arbitrary amount of user memory, and any of these can fail at any point.  This poses a design and error-handling problem: how do you best avoid obscuring the primary function of code in a morass of error-handling?  Furthermore, when an error is detected, how do you ensure that all temporarily allocated resources (locks, buffers, etc.) are freed?  In a few paragraphs, describe the strategy or strategies you adopted for managing these issues.  Give an example.
 
