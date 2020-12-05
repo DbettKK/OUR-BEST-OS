@@ -337,6 +337,96 @@ sys_exec (struct intr_frame* f)
   *user_ptr++;    // 指针指向待执行的文件
   f->eax = process_execute((char*)* user_ptr);    // 执行程序，利用 eax 寄存器返回 pid
 }
+
+/* Starts a new thread running a user program loaded from
+   FILENAME.  The new thread may be scheduled (and may even exit)
+   before process_execute() returns.  Returns the new process's
+   thread id, or TID_ERROR if the thread cannot be created. */
+tid_t
+process_execute (const char *file_name)
+{
+  tid_t tid;
+  /* Make a copy of FILE_NAME.
+     Otherwise there's a race between the caller and load(). */
+  char *fn_copy = malloc(strlen(file_name)+1);
+  char *fn_copy2 = malloc(strlen(file_name)+1);
+  strlcpy (fn_copy, file_name, strlen(file_name)+1);
+  strlcpy (fn_copy2, file_name, strlen(file_name)+1);
+
+  /* Create a new thread to execute FILE_NAME. */
+  char * save_ptr;
+  fn_copy2 = strtok_r (fn_copy2, " ", &save_ptr);
+  tid = thread_create (fn_copy2, PRI_DEFAULT, start_process, fn_copy);      // 新线程执行 start_process() 函数，在其中加载指定的可执行文件，详细见下
+  free (fn_copy2);
+
+  if (tid == TID_ERROR){
+    free (fn_copy);
+    return tid;
+  }
+
+  /* Sema down the parent process, waiting for child */
+  sema_down(&thread_current()->sema);     // 对信号量进行 P 操作，等待 start_process() 函数完成加载时的 V 操作，实现同步
+  if (!thread_current()->success) return TID_ERROR;
+
+  return tid;
+}
+
+/* A thread function that loads a user process and starts it
+   running. */
+static void
+start_process (void *file_name_)
+{
+  char *file_name = file_name_;
+  struct intr_frame if_;
+  bool success;
+
+  char *fn_copy=malloc(strlen(file_name)+1);
+  strlcpy(fn_copy,file_name,strlen(file_name)+1);
+
+  /* Initialize interrupt frame and load executable. */
+  memset (&if_, 0, sizeof if_);
+  if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
+  if_.cs = SEL_UCSEG;
+  if_.eflags = FLAG_IF | FLAG_MBS;
+
+  char *token, *save_ptr;
+  file_name = strtok_r (file_name, " ", &save_ptr);
+  success = load (file_name, &if_.eip, &if_.esp);
+
+  if (success){
+    /* Our implementation for Task 1:
+      Calculate the number of parameters and the specification of parameters */
+    int argc = 0;
+    /* The number of parameters can't be more than 50 in the test case */
+    int argv[50];
+    for (token = strtok_r (fn_copy, " ", &save_ptr); token != NULL; token = strtok_r (NULL, " ", &save_ptr)){
+      if_.esp -= (strlen(token)+1);
+      memcpy (if_.esp, token, strlen(token)+1);
+      argv[argc++] = (int) if_.esp;
+    }
+    push_argument (&if_.esp, argc, argv);
+    /* Record the exec_status of the parent thread's success and sema up parent's semaphore */
+    thread_current ()->parent->success = true;    // 记录加载结果
+    sema_up (&thread_current ()->parent->sema);   // 完成加载，对信号量进行 V 操作通知 process_execute() 函数
+  }
+
+  /* If load failed, quit. */
+  else{
+    /* Record the exec_status of the parent thread's success and sema up parent's semaphore */
+    thread_current ()->parent->success = false;   // 记录加载结果
+    sema_up (&thread_current ()->parent->sema);   // 完成加载，对信号量进行 V 操作通知 process_execute() 函数
+    thread_exit ();
+  }
+
+  /* Start the user process by simulating a return from an
+     interrupt, implemented by intr_exit (in
+     threads/intr-stubs.S).  Because intr_exit takes all of its
+     arguments on the stack in the form of a `struct intr_frame',
+     we just point the stack pointer (%esp) to our stack frame
+     and jump to it. */
+  asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
+  NOT_REACHED ();
+}
 ```
 
 
@@ -1112,14 +1202,18 @@ B5: Briefly describe your implementation of the "wait" system call and how it in
 
 B6: Any access to user program memory at a user-specified address can fail due to a bad pointer value.  Such accesses must cause the process to be terminated.  System calls are fraught with such accesses, e.g. a "write" system call requires reading the system call number from the user stack, then each of the call's three arguments, then an arbitrary amount of user memory, and any of these can fail at any point.  This poses a design and error-handling problem: how do you best avoid obscuring the primary function of code in a morass of error-handling?  Furthermore, when an error is detected, how do you ensure that all temporarily allocated resources (locks, buffers, etc.) are freed?  In a few paragraphs, describe the strategy or strategies you adopted for managing these issues.  Give an example.
 
-
+> 在每个系统调用的功能函数中，对于需要处理的内存，设计了 `check_ptr2()` 函数，其中将检查将访问的内存是否为用户程序的虚拟内存、内存是否在当前线程的内存页中并检查内存页中的内容。
+>
+> 对于发生错误的情况，设计了 `exit_special()` 函数进行处理，独立出了错误处理的逻辑，避免了代码的混乱。
+>
+> 在 `thread_exit()` 函数中，将释放 `struct thread` 中记录的全部子进程、打开文件等的资源。
 
 
 #### 6.2.3 Synchronization
 
 B7: The "exec" system call returns -1 if loading the new executable fails, so it cannot return before the new executable has completed loading.  How does your code ensure this?  How is the load success/failure status passed back to the thread that calls "exec"?
 
-
+> 在 `sys_exec()` 函数中调用了 `process_execute()` 函数，其中调用 `thread_create()` 函数以启动新的线程来执行指定的可执行文件，随后 `process_execute()` 函数对信号量执行 P 操作，实现对新线程的等待；新的线程在初始化后执行 `start_process()` 函数，其中加载指定的可执行文件，当加载完成后，保存加载的结果，并对信号量进行 V 操作，通知正在等待的 `process_execute()` 函数，由此实现了同步。
 
 B8: Consider parent process P with child process C.  How do you ensure proper synchronization and avoid race conditions when P calls wait(C) before C exits?  After C exits?  How do you ensure that all resources are freed in each case?  How about when P terminates without waiting, before C exits?  After C exits?  Are there any special cases?
 
