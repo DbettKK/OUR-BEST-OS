@@ -1217,16 +1217,24 @@ B7: The "exec" system call returns -1 if loading the new executable fails, so it
 
 B8: Consider parent process P with child process C.  How do you ensure proper synchronization and avoid race conditions when P calls wait(C) before C exits?  After C exits?  How do you ensure that all resources are freed in each case?  How about when P terminates without waiting, before C exits?  After C exits?  Are there any special cases?
 
-
+> 为了顺利处理资源的释放和父子线程间必要的交流实现，我们将资源分为两类：一是线程运行时自身使用到的基本资源，这些由当前线程维护，在线程退出时即释放；二是与父子线程间有关的资源，比如实现同步的信号量、传递值的变量，由于其主要是父线程的需要，因此由父线程来维护。
+>
+> 结合 B5 中对 `wait()` 调用的实现的描述，当 P 调用 `wait(C)` 时，在执行过程中需要对信号量执行 P 操作，因此需要等待 C 在线程即将退出时对同一信号量进行 V 操作，此时 C 已经完成了必要的资源释放、退出值的保存等工作，而且退出值和信号量均在 P 的结构体内维护，由此实现同步，无论 P 在 C 退出前还是退出后，都能顺利取得 C 的退出值。
+>
+TODO 如果 P 先退出，C 就不能保证结果了？ 
 
 #### 6.2.4 Rationale
 
 B9: Why did you choose to implement access to user memory from the kernel in the way that you did?
 
-
+> 在访问用户内存前，检查了将访问的内存是否为用户程序的虚拟内存、内存是否在当前线程的内存页中并检查内存页中的内容，保证了安全性。
 
 B10: What advantages or disadvantages can you see to your design for file descriptors?
 
-
+TODO 文件描述符好像没有修改？
+> 优点？ 缺点？
 
 B11: The default tid_t to pid_t mapping is the identity mapping. If you changed it, what advantages are there to your approach?
+
+TODO 题意有点魔幻（
+> 未进行修改。在实现中，`pid_t` 值与线程的 `tid_t` 值相同。
