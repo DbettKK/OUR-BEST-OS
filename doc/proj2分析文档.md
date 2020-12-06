@@ -1194,7 +1194,19 @@ B3: Describe your code for reading and writing user data from the kernel.
 
 B4: Suppose a system call causes a full page (4,096 bytes) of data to be copied from user space into the kernel.  What is the least and the greatest possible number of inspections of the page table (e.g. calls to pagedir_get_page()) that might result?  What about for a system call that only copies 2 bytes of data?  Is there room for improvement in these numbers, and how much?
 
-TODO
+> 对于打开一整个页表数据：
+>
+> 其最小值为1，因为可能我们在检查第一张页表时，相应的内核虚拟地址正好对应某一空页表的头部，从而不需要更多次的检查，他就已经可以容纳一整页的所有数据。
+>
+> 如果不连续的话，最大值可能为4096。因为我们可能需要检查每一个地址来保证地址的有效性，从而才能将所有数据拷贝进来。如果连续的话，那最大值就为2，我们就尝试拿到一个虚拟地址，如果其没有对应页表的头部，那么我们就检查其开始指针和结尾指针，从而查看映射关系拿到页表头就能容纳数据了。
+>
+> 对于 2 bytes的数据：
+>
+> 最小值也为1，和上文所描述的一致，我们拿到一个内核虚拟地址后，其页表里还剩余有大于2字节的空间，我们就在该页进行复制即可，而不用另一次检查了。
+>
+> 最大值也为2，不管其连续与否，如果我们拿到的虚拟地址对应页表只剩下1byte的空间，那么我们就需要检查另1 byte空间的数据应该放到哪，所以需要两次检查。
+>
+> 对于这些数字，我们觉得没有什么提升的空间了。
 
 B5: Briefly describe your implementation of the "wait" system call and how it interacts with process termination.
 
@@ -1219,9 +1231,13 @@ B8: Consider parent process P with child process C.  How do you ensure proper sy
 
 > 为了顺利处理资源的释放和父子线程间必要的交流实现，我们将资源分为两类：一是线程运行时自身使用到的基本资源，这些由当前线程维护，在线程退出时即释放；二是与父子线程间有关的资源，比如实现同步的信号量、传递值的变量，由于其主要是父线程的需要，因此由父线程来维护。
 >
-> 结合 B5 中对 `wait()` 调用的实现的描述，当 P 调用 `wait(C)` 时，在执行过程中需要对信号量执行 P 操作，因此需要等待 C 在线程即将退出时对同一信号量进行 V 操作，此时 C 已经完成了必要的资源释放、退出值的保存等工作，而且退出值和信号量均在 P 的结构体内维护，由此实现同步，无论 P 在 C 退出前还是退出后，都能顺利取得 C 的退出值。
+> 当 P 在 C 未退出时调用 `wait(C)` 时，P会对自身结构体中的childs属性进行遍历查找，遍历成功后，就检查子进程 C 的isrun属性，也就是上文数据结构中child的属性，如果 C 仍在运行，则通过信号量进行自身阻塞，知道在 C 执行完成释放资源后，再被唤醒，然后通过其属性st_exit获得其返回状态码。
 >
-TODO 如果 P 先退出，C 就不能保证结果了？ 
+> 如果 P 在 C 退出后调用`wait(C)`，P 会检查到 C 的isrun属性，从而得知 C 已经退出从而直接获得其进程退出状态码，也就是上文结构体中所定义的st_exit，就能拿到退出值。
+>
+> 如果在 C 退出前，P 就已经被终结的话，那么 P 中维护的child这个列表就会被释放，那么该维护的锁也会释放，也没有其他进程等待该信号量，那么在子进程完成自身任务准备结束并设置退出状态码时，会发现父进程已经终结，所以状态码就被忽略，子进程继续执行，释放资源。
+>
+> 如果在 C 退出后，P 被终结的话，那么同理 P 中的资源，C 持有的资源已经正确释放，P 在退出后也能正确释放。
 
 #### 6.2.4 Rationale
 
@@ -1231,10 +1247,16 @@ B9: Why did you choose to implement access to user memory from the kernel in the
 
 B10: What advantages or disadvantages can you see to your design for file descriptors?
 
-TODO 文件描述符好像没有修改？
-> 优点？ 缺点？
+> 优点：
+> ①只设置了一个int类型来存储fd，保证空间占用最小，且能供我们灵活使用
+>
+> ②内核能通过这样一个属性来知道某进程所打开的所有文件，使其能够更好的管理掌控这些已经打开的文件。
+>
+> 缺点：
+> ①有可能用户程序会打开过多的文件，从而有可能使得内核崩溃。
+>
+> ②在子进程想获得父进程所打开的文件的时候，可能需要更多接口和属性的调用才能实现，效率较低。
 
 B11: The default tid_t to pid_t mapping is the identity mapping. If you changed it, what advantages are there to your approach?
 
-TODO 题意有点魔幻（
-> 未进行修改。在实现中，`pid_t` 值与线程的 `tid_t` 值相同。
+> 我们并未对其进行修改。在实现中，`pid_t` 值与线程的 `tid_t` 值相同。
