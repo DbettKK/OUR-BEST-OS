@@ -2,9 +2,10 @@
 #define THREADS_THREAD_H
 
 #include <debug.h>
+#include <hash.h>
 #include <list.h>
 #include <stdint.h>
-#include <threads/synch.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -25,26 +26,6 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-/* 添加 */
-/* Our Implementatio for exec and wait:
-Child process for a parent's process which does fork */
-struct child
-  {
-    tid_t tid;                           /* tid of the thread */
-    bool isrun;                          /* whether the child's thread is run successfully */
-    struct list_elem child_elem;         /* list of children */
-    struct semaphore sema;               /* semaphore to control waiting */
-    int store_exit;                      /* the exit status of child thread */
-  };
-
-/* File that the thread open */
-struct thread_file
-  {
-    int fd;
-    struct file* file;
-    struct list_elem file_elem;
-  };
-/* 结束 */
 /* A kernel thread or user process.
 
    Each thread structure is stored in its own 4 kB page.  The
@@ -111,43 +92,54 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+    /* Owned by process.c. */
+    int exit_code;                      /* Exit code. */
+    struct wait_status *wait_status;    /* This process's completion status. */
+    struct list children;               /* Completion status of children. */
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
-#ifdef USERPROG
+    /* Alarm clock. */
+    int64_t wakeup_time;                /* Time to wake this thread up. */
+    struct list_elem timer_elem;        /* Element in timer_wait_list. */
+    struct semaphore timer_sema;        /* Semaphore. */
+
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
-#endif
+    struct hash *pages;                 /* Page table. */
+    struct file *bin_file;              /* The binary executable. */
+
+    /* Owned by syscall.c. */
+    struct list fds;                    /* List of file descriptors. */
+    struct list mappings;               /* Memory-mapped files. */
+    int next_handle;                    /* Next handle value. */
+    void *user_esp;                     /* User's stack pointer. */
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
-/* 添加 */
-    /* Our implementation for struct thread to store useful information */
-    /* Structure for Task2 */
-    struct list childs;                 /* The list of childs */
-    struct child * thread_child;        /* Store the child of this thread */
-    int st_exit;                        /* Exit status */
-    struct semaphore sema;              /* Control the child process's logic, finish parent waiting for child */
-    bool success;                       /* Judge whehter the child's thread execute successfully */
-    struct thread* parent;              /* Parent thread of the thread */
-    
-    /* Structure for Task3 */
-    struct list files;                  /* List of opened files */
-    int file_fd;                        /* File's descriptor */
-    struct file * file_owned;           /* The file opened */
-
   };
-/* 结束 */
 
+/* Tracks the completion of a process.
+   Reference held by both the parent, in its `children' list,
+   and by the child, in its `wait_status' pointer. */
+struct wait_status
+  {
+    struct list_elem elem;              /* `children' list element. */
+    struct lock lock;                   /* Protects ref_cnt. */
+    int ref_cnt;                        /* 2=child and parent both alive,
+                                           1=either child or parent alive,
+                                           0=child and parent both dead. */
+    tid_t tid;                          /* Child thread id. */
+    int exit_code;                      /* Child exit code, if dead. */
+    struct semaphore dead;              /* 1=child alive, 0=child dead. */
+  };
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
-/* 添加 */
-void acquire_lock_f(void);
-void release_lock_f(void);
-/* 结束 */
+
 void thread_init (void);
 void thread_start (void);
 
@@ -178,6 +170,5 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
-
 
 #endif /* threads/thread.h */
