@@ -2,8 +2,10 @@
 #define THREADS_THREAD_H
 
 #include <debug.h>
+#include <hash.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -23,6 +25,27 @@ typedef int tid_t;
 #define PRI_MIN 0                       /* Lowest priority. */
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
+
+/* Our Implementatio for exec and wait:
+Child process for a parent's process which does fork */
+struct child
+  {
+    tid_t tid;                          /* Child thread id. */
+    struct list_elem child_elem;        /* `children' list element. */
+    struct semaphore sema;              /* 1=child alive, 0=child dead. */
+    int store_exit;                     /* Child exit code, if dead. */
+    struct lock lock;                   /* Protects ref_cnt. */
+    /* 2=child and parent both alive,1=either child or parent alive,0=child and parent both dead. */
+    int ref_cnt;                        
+  };
+
+/* File that the thread open */
+struct thread_file
+  {
+    int fd;
+    struct file* file;
+    struct list_elem file_elem;
+  };
 
 /* A kernel thread or user process.
 
@@ -100,6 +123,27 @@ struct thread
 
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
+    
+    /* Our implementation for struct thread to store useful information */
+    /* Structure for Task2 */
+    struct list childs;                 /* The list of childs */
+    struct child * thread_child;        /* Store the child of this thread */
+    int st_exit;                        /* Exit status */
+
+    /* Structure for Task3 and Proj3. */
+    struct list fds;                    /* List of file descriptors. */
+    struct list mappings;               /* Memory-mapped files. */
+    int next_handle;                    /* Next handle value. */
+    void *user_esp;                     /* User's stack pointer. */
+
+    /* Structure for Proj3 */
+    struct hash *pages;                 /* Page table. */
+    struct file *bin_file;              /* The binary executable. */
+
+    /* Alarm clock. */
+    int64_t wakeup_time;                /* Time to wake this thread up. */
+    struct list_elem timer_elem;        /* Element in timer_wait_list. */
+    struct semaphore timer_sema;        /* Semaphore. */
   };
 
 /* If false (default), use round-robin scheduler.

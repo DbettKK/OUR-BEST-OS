@@ -1,0 +1,160 @@
+		           +---------------------------+
+       	           |         CIS 520           |
+		           | PROJECT 3: Virtual Memory |
+		           |     DESIGN DOCUMENT       |
+		           +---------------------------+
+
+---- GROUP ----
+
+>> Fill in the names of your group members.
+
+Lev Kavs
+Sam Moylan
+Mitchell Slavens
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+Nope.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
+
+https://github.com/ChristianJHughes/pintos-project3
+http://www.scs.stanford.edu/19wi-cs140/pintos/pintos.html#SEC_Contents
+https://static1.squarespace.com/static/5b18aa0955b02c1de94e4412/t/5b85fad2f950b7b16b7a2ed6/1535507195196/Pintos+Guide
+
+
+			PAGE TABLE MANAGEMENT
+			=====================
+
+---- ALGORITHMS ----
+
+>> A1: In a few paragraphs, describe the existing code for locating the
+>> frame, if any, that contains the data of a given page.
+
+
+
+---- SYNCHRONIZATION ----
+
+>> A2: When two user processes both need a new frame at the same time,
+>> how are races avoided?
+
+When searching for a frame, processes must first acquire the scan_lock,
+this is done within try_frame_alloc_and_lock() function. This ensures
+synchronicity when accessing the frames array. Additionally frames have
+a lock member that prevent simultaneous access to the same frame. A lock
+to a frame must be accessible, otherwise the try_frame_alloc_and_lock()
+for-loop will attempt to acquire the lock for the next frame.
+
+		       PAGING TO AND FROM DISK
+		       =======================
+
+---- ALGORITHMS ----
+
+>> B1: When a frame is required but none is free, some frame must be
+>> evicted.  Describe the algorithm used to choose a frame to evict.
+
+The second for-loop of try_frame_alloc_and_lock() function is where a
+frame is evicted. This for-loop iterates through the frames two times
+to check the accessed status. First the frame is checked for an
+associated page. If no associated page is found then we return the frame
+immediately. Otherwise, page_accessed_recently() is called on the page
+to check the accessed status. If recently accessed, then the loop moves
+to the next frame changing the page status. If the page is not accessed
+recently then the page is evicted and the frame is returned. If no
+page is not recently accessed then the for-loop begins its second
+iteration and now there is a higher chance of pages not being accessed
+recently because of the previous calls to page_accessed_recently().
+
+>> B2: Explain your heuristic for deciding whether a page fault for an
+>> invalid virtual address should cause the stack to be extended into
+>> the page that faulted.
+
+From the write up, the stack should be extended when the page faults due to
+a PUSH or PUSHA instruction. PUSHA can fault 32 bytes below the stack pointer.
+So, faults within 32 bytes of the ESP should be valid. However, if extending the
+stack will cause the stack to be larger than the max stack size (1MB), the
+extension should obviously not happen. So, we first ensure that the extension will
+not cause the stack to exceed the max stack size, and then we check if the fault is
+within 32 bytes of the ESP. If both of these conditions are true, we extend the stack.
+
+			 MEMORY MAPPED FILES
+			 ===================
+
+---- DATA STRUCTURES ----
+
+>> C1: Copy here the declaration of each new or changed `struct' or
+>> `struct' member, global or static variable, `typedef', or
+>> enumeration.  Identify the purpose of each in 25 words or less.
+
+We did not add or modify any structs.
+
+---- ALGORITHMS ----
+
+>> C2: Describe how memory mapped files integrate into your virtual
+>> memory subsystem.  Explain how the page fault and eviction
+>> processes differ between swap pages and other pages.
+
+The threads contain files that are open by it. Memory mapped files are referenced
+through a struct called "mapping". That struct holds a file and the range of
+memory addresses that the file occupies. The swap table is used when evicting
+non memory-mapped files, and also files that have not been modified.
+
+>> C3: Explain how you determine whether a new file mapping overlaps
+>> any existing segment.
+
+The page_allocate() function will only allocate a page if it is free and unmapped.
+It will attempt to add the new mapping to the page table, and if an entry for the
+page already exists, it will unmap and return NULL.
+
+---- RATIONALE ----
+
+>> C4: Mappings created with "mmap" have similar semantics to those of
+>> data demand-paged from executables, except that "mmap" mappings are
+>> written back to their original files, not to swap.  This implies
+>> that much of their implementation can be shared.  Explain why your
+>> implementation either does or does not share much of the code for
+>> the two situations.
+
+Everything will go through page_out(). We check in that function if the file
+should be written to the disk or not. We write to the disk if the page isn't private.
+Otherwise, we send the page to the swap partition.
+
+			   SURVEY QUESTIONS
+			   ================
+
+Answering these questions is optional, but it will help us improve the
+course in future quarters.  Feel free to tell us anything you
+want--these questions are just to spur your thoughts.  You may also
+choose to respond anonymously in the course evaluations at the end of
+the quarter.
+
+>> In your opinion, was this assignment, or any one of the three problems
+>> in it, too easy or too hard?  Did it take too long or too little time?
+
+It was difficult until we understood the problem. It took a decent amount
+of time to complete. Overall, not bad.
+
+>> Did you find that working on a particular part of the assignment gave
+>> you greater insight into some aspect of OS design?
+
+Yes, when working with the pages and frames.
+
+>> Is there some particular fact or hint we should give students in
+>> future quarters to help them solve the problems?  Conversely, did you
+>> find any of our guidance to be misleading?
+
+No, no.
+
+>> Do you have any suggestions for the TAs to more effectively assist
+>> students, either for future quarters or the remaining projects?
+
+No.
+
+>> Any other comments?
+
+No.
