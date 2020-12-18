@@ -173,57 +173,53 @@ sys_exit (struct intr_frame* f)
 }
 
 /* Exec system call. */
-static int
-sys_exec (const char *ufile)
+void
+sys_exec (struct intr_frame* f)
 {
-  char *kfile = copy_in_string (ufile);
-
-  lock_acquire (&fs_lock);
-  tid_t tid = process_execute (kfile);
-  lock_release (&fs_lock);
-
-  palloc_free_page (kfile);
-
-  return tid;
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  f->eax = process_execute((char*)* user_ptr);
 }
 
 /* Wait system call. */
-static int
-sys_wait (tid_t child)
+void 
+sys_wait (struct intr_frame* f)
 {
-  return process_wait (child);
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  f->eax = process_wait(*user_ptr);
 }
+
 
 /* Create system call. */
 static int
-sys_create (const char *ufile, unsigned initial_size)
+sys_create (struct intr_frame* f)
 {
-  char *kfile = copy_in_string (ufile);
-  bool ok;
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 5);
+  check_ptr2 (*(user_ptr + 4));
+  *user_ptr++;
 
   lock_acquire (&fs_lock);
-  ok = filesys_create (kfile, initial_size);
+  f->eax = filesys_create ((const char *)*user_ptr, *(user_ptr+1));
   lock_release (&fs_lock);
-
-  palloc_free_page (kfile);
-
-  return ok;
 }
 
 /* Remove system call. */
-static int
-sys_remove (const char *ufile)
+void
+sys_remove (struct intr_frame* f)
 {
-  char *kfile = copy_in_string (ufile);
-  bool ok;
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
 
   lock_acquire (&fs_lock);
-  ok = filesys_remove (kfile);
+  f->eax = filesys_remove ((const char *)*user_ptr);
   lock_release (&fs_lock);
-
-  palloc_free_page (kfile);
-
-  return ok;
 }
 
 /* A file descriptor, for binding a file handle to a file. */
@@ -235,31 +231,52 @@ struct file_descriptor
   };
 
 /* Open system call. */
-static int
-sys_open (const char *ufile)
+void
+sys_open (struct intr_frame* f)
 {
-  char *kfile = copy_in_string (ufile);
-  struct file_descriptor *fd;
-  int handle = -1;
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  check_ptr2 (*(user_ptr + 1));
+  *user_ptr++;
+  // char *kfile = copy_in_string (ufile);
+  // struct file_descriptor *fd;
+  // int handle = -1;
 
-  fd = malloc (sizeof *fd);
-  if (fd != NULL)
-    {
-      lock_acquire (&fs_lock);
-      fd->file = filesys_open (kfile);
-      if (fd->file != NULL)
-        {
-          struct thread *cur = thread_current ();
-          handle = fd->handle = cur->next_handle++;
-          list_push_front (&cur->fds, &fd->elem);
-        }
-      else
-        free (fd);
-      lock_release (&fs_lock);
-    }
+  lock_acquire (&fs_lock);
+  struct file * file_opened = filesys_open((const char *)*user_ptr);
+  lock_release (&fs_lock);
+  struct thread * t = thread_current();
+  if (file_opened)
+  {
+    struct thread_file *thread_file_temp = malloc(sizeof(struct thread_file));
+    thread_file_temp->fd = t->file_fd++;
+    thread_file_temp->file = file_opened;
+    list_push_back (&t->files, &thread_file_temp->file_elem);
+    f->eax = thread_file_temp->fd;
+  } 
+  else
+  {
+    f->eax = -1;
+  }
 
-  palloc_free_page (kfile);
-  return handle;
+  // fd = malloc (sizeof *fd);
+  // if (fd != NULL)
+  //   {
+  //     lock_acquire (&fs_lock);
+  //     fd->file = filesys_open (kfile);
+  //     if (fd->file != NULL)
+  //       {
+  //         struct thread *cur = thread_current ();
+  //         handle = fd->handle = cur->next_handle++;
+  //         list_push_front (&cur->fds, &fd->elem);
+  //       }
+  //     else
+  //       free (fd);
+  //     lock_release (&fs_lock);
+  //   }
+
+  // palloc_free_page (kfile);
+  // return handle;
 }
 
 /* Returns the file descriptor associated with the given handle.

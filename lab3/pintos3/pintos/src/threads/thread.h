@@ -131,7 +131,12 @@ struct thread
     int st_exit;                        /* Exit status */
 
     /* Structure for Task3 and Proj3. */
-    struct list fds;                    /* List of file descriptors. */
+    // struct list fds;                    /* List of file descriptors. */
+
+    struct list files;                  /* List of opened files */
+    int file_fd;                        /* File's descriptor */
+    struct file * file_owned;           /* The file opened */
+    
     struct list mappings;               /* Memory-mapped files. */
     int next_handle;                    /* Next handle value. */
     void *user_esp;                     /* User's stack pointer. */
