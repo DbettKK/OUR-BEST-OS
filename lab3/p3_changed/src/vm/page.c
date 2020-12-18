@@ -9,7 +9,7 @@
 #include "userprog/pagedir.h"
 #include "threads/vaddr.h"
 
-/* Maximum size of process stack, in bytes. */
+/* Define the max. */
 #define S_MAXSIZE (1024 * 1024)
 
 /* Destroys a page, which must be in the current process's
@@ -112,7 +112,6 @@ page_in (void *fault_addr)
       if (!do_page_in (p))
         return false;
     }
-  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   /* Install frame into page table. */
   success = pagedir_set_page (thread_current ()->pagedir, p->addr,
@@ -132,9 +131,6 @@ page_out (struct page *p)
 {
   bool dirty;
   bool ok = false;
-
-  //ASSERT (p->frame != NULL);
-  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   /* Mark page not present in page table, forcing accesses by the
      process to fault.  This must happen before checking the
@@ -180,9 +176,6 @@ bool
 page_accessed_recently (struct page *p)
 {
   bool was_accessed;
-
-  //ASSERT (p->frame != NULL);
-  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   was_accessed = pagedir_is_accessed (p->thread->pagedir, p->addr);
   if (was_accessed)
@@ -231,7 +224,7 @@ void
 page_deallocate (void *vaddr)
 {
   struct page *p = page_for_addr (vaddr);
-  //ASSERT (p != NULL);
+
   frame_lock (p);
   if (p->frame)
     {
@@ -288,6 +281,5 @@ void
 page_unlock (const void *addr)
 {
   struct page *p = page_for_addr (addr);
-  //ASSERT (p != NULL);
   frame_unlock (p->frame);
 }

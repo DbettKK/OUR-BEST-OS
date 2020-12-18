@@ -18,16 +18,17 @@ static size_t hand;
 void
 frame_init (void) 
 {
+  void *base;
   lock_init (&scan_lock);
   
   frames = malloc (sizeof *frames * init_ram_pages);
 
-  while ( palloc_get_page (PAL_USER) != NULL ) 
+  while ( (base = palloc_get_page (PAL_USER)) != NULL ) 
     {
       frame_cnt++;
       struct frame *f = &frames[frame_cnt];
       lock_init (&f->lock);
-      f->base = palloc_get_page (PAL_USER);
+      f->base = base;
       f->page = NULL;
     }
 }
