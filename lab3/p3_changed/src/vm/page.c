@@ -10,7 +10,7 @@
 #include "threads/vaddr.h"
 
 /* Maximum size of process stack, in bytes. */
-#define STACK_MAX (1024 * 1024)
+#define S_MAXSIZE (1024 * 1024)
 
 /* Destroys a page, which must be in the current process's
    page table.  Used as a callback for hash_destroy(). */
@@ -51,7 +51,7 @@ page_for_addr (const void *address)
         return hash_entry (e, struct page, hash_elem);
       /* No page.  Expand stack? */
   /* add code */
-      if((p.addr > PHYS_BASE - STACK_MAX) && (thread_current()->user_esp - 32 < address))
+      if((p.addr > PHYS_BASE - S_MAXSIZE) && (thread_current()->user_esp - 32 < address))
         return page_allocate(p.addr, false);
     }
   return NULL;
@@ -80,9 +80,6 @@ do_page_in (struct page *p)
                                         p->file_bytes, p->file_offset);
       off_t zero_bytes = PGSIZE - read_bytes;
       memset (p->frame->base + read_bytes, 0, zero_bytes);
-      if (read_bytes != p->file_bytes)
-        printf ("bytes read (%"PROTd") != bytes requested (%"PROTd")\n",
-                read_bytes, p->file_bytes);
     }
   else
     {
@@ -115,7 +112,7 @@ page_in (void *fault_addr)
       if (!do_page_in (p))
         return false;
     }
-  ASSERT (lock_held_by_current_thread (&p->frame->lock));
+  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   /* Install frame into page table. */
   success = pagedir_set_page (thread_current ()->pagedir, p->addr,
@@ -136,8 +133,8 @@ page_out (struct page *p)
   bool dirty;
   bool ok = false;
 
-  ASSERT (p->frame != NULL);
-  ASSERT (lock_held_by_current_thread (&p->frame->lock));
+  //ASSERT (p->frame != NULL);
+  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   /* Mark page not present in page table, forcing accesses by the
      process to fault.  This must happen before checking the
@@ -184,8 +181,8 @@ page_accessed_recently (struct page *p)
 {
   bool was_accessed;
 
-  ASSERT (p->frame != NULL);
-  ASSERT (lock_held_by_current_thread (&p->frame->lock));
+  //ASSERT (p->frame != NULL);
+  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   was_accessed = pagedir_is_accessed (p->thread->pagedir, p->addr);
   if (was_accessed)
@@ -234,7 +231,7 @@ void
 page_deallocate (void *vaddr)
 {
   struct page *p = page_for_addr (vaddr);
-  ASSERT (p != NULL);
+  //ASSERT (p != NULL);
   frame_lock (p);
   if (p->frame)
     {
@@ -291,6 +288,6 @@ void
 page_unlock (const void *addr)
 {
   struct page *p = page_for_addr (addr);
-  ASSERT (p != NULL);
+  //ASSERT (p != NULL);
   frame_unlock (p->frame);
 }
