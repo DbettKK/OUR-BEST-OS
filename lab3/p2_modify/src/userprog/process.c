@@ -186,10 +186,12 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
+  
   pd = cur->pagedir;
+  
+  page_exit ();
   if (pd != NULL)
   {
     /* Correct ordering here is crucial.  We must set
@@ -310,6 +312,11 @@ load (const char *file_name, void (**eip) (void), void **esp)
     goto done;
   process_activate ();
 
+  t->pages = malloc (sizeof *t->pages);
+  file = filesys_open (file_name);
+  if (t->pages == NULL)
+    hash_init (t->pages, page_hash, page_less, NULL);
+    
   /* Open executable file. */
   acquire_lock_f ();
   file = filesys_open (file_name);

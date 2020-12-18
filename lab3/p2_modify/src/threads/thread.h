@@ -2,6 +2,7 @@
 #define THREADS_THREAD_H
 
 #include <debug.h>
+#include <hash.h>
 #include <list.h>
 #include <stdint.h>
 #include <threads/synch.h>
@@ -35,6 +36,8 @@ struct child
     struct list_elem child_elem;         /* list of children */
     struct semaphore sema;               /* semaphore to control waiting */
     int store_exit;                      /* the exit status of child thread */
+    struct lock lock;
+    int ref_cnt;
   };
 
 /* File that the thread open */
@@ -110,7 +113,7 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
+  
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
@@ -132,10 +135,20 @@ struct thread
     struct thread* parent;              /* Parent thread of the thread */
     
     /* Structure for Task3 */
+    struct list fds;
     struct list files;                  /* List of opened files */
     int file_fd;                        /* File's descriptor */
     struct file * file_owned;           /* The file opened */
+    struct list mappings;
+    int next_handle;
+    void *user_esp;
+    
+    struct hash *pages;
+    struct file *bin_file;
 
+    int64_t wakeup_time;
+    struct list_elem timer_elem;
+    struct semaphore timer_sema;
   };
 /* 结束 */
 

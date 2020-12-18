@@ -14,6 +14,7 @@
 #include "pagedir.h"
 #include <threads/vaddr.h>
 #include <filesys/filesys.h>
+
 # define max_syscall 20
 # define USER_VADDR_BOUND (void*) 0x08048000
 /* Our implementation for storing the array of system calls for Task2 and Task3 */
@@ -35,6 +36,10 @@ void sys_write(struct intr_frame* f); /* syscall write */
 void sys_seek(struct intr_frame* f); /* syscall seek */
 void sys_tell(struct intr_frame* f); /* syscall tell */
 void sys_close(struct intr_frame* f); /* syscall close */
+
+static int sys_mmap (struct intr_frame* f);
+static int sys_munmap (struct intr_frame* f);
+
 static void syscall_handler (struct intr_frame *);
 struct thread_file * find_file_id(int fd);
 
@@ -58,7 +63,8 @@ syscall_init (void)
   syscalls[SYS_CLOSE] =&sys_close;
   syscalls[SYS_READ] = &sys_read;
   syscalls[SYS_FILESIZE] = &sys_filesize;
-
+  syscalls[SYS_MMAP] = &sys_mmap;
+  syscalls[SYS_MUNMAP] = &sys_munmap;
 }
 
 /* Method in document to handle special situation */
@@ -384,4 +390,117 @@ syscall_handler (struct intr_frame *f UNUSED)
     exit_special ();
   }
   syscalls[type](f);
+}
+
+
+
+/* Binds a mapping id to a region of memory and a file. */
+struct mapping
+  {
+    struct list_elem elem;      /* List element. */
+    int handle;                 /* Mapping id. */
+    struct file *file;          /* File. */
+    uint8_t *base;              /* Start of memory mapping. */
+    size_t page_cnt;            /* Number of pages mapped. */
+  };
+
+/* Returns the file descriptor associated with the given handle.
+   Terminates the process if HANDLE is not associated with a
+   memory mapping. */
+static struct mapping *
+lookup_mapping (int handle)
+{
+  struct thread *cur = thread_current ();
+  struct list_elem *e;
+
+  for (e = list_begin (&cur->mappings); e != list_end (&cur->mappings);
+       e = list_next (e))
+    {
+      struct mapping *m = list_entry (e, struct mapping, elem);
+      if (m->handle == handle)
+        return m;
+    }
+
+  thread_exit ();
+}
+
+/* Remove mapping M from the virtual address space,
+   writing back any pages that have changed. */
+static void
+unmap (struct mapping *m)
+{
+/* add code here */
+  list_remove(&m->elem);
+  for(int i = 0; i < m->page_cnt; i++)
+  {
+    //Pages written by the process are written back to the file...
+    if (pagedir_is_dirty(thread_current()->pagedir, m->base + (PGSIZE * i)))
+    {
+      lock_acquire(&fs_lock);
+      file_write_at(m->file, m->base + (PGSIZE * i), PGSIZE, (PGSIZE * i)); // Check 3rd parameter
+      lock_release(&fs_lock);
+    }
+  }
+  for(int i = 0; i < m->page_cnt; i++)
+  {
+    page_deallocate(m->base + (PGSIZE * i));
+  }
+}
+
+/* Mmap system call. */
+static int
+sys_mmap (int handle, void *addr)
+{
+  struct file_descriptor *fd = lookup_fd (handle);
+  struct mapping *m = malloc (sizeof *m);
+  size_t offset;
+  off_t length;
+
+  if (m == NULL || addr == NULL || pg_ofs (addr) != 0)
+    return -1;
+
+  m->handle = thread_current ()->next_handle++;
+  lock_acquire (&fs_lock);
+  m->file = file_reopen (fd->file);
+  lock_release (&fs_lock);
+  if (m->file == NULL)
+    {
+      free (m);
+      return -1;
+    }
+  m->base = addr;
+  m->page_cnt = 0;
+  list_push_front (&thread_current ()->mappings, &m->elem);
+
+  offset = 0;
+  lock_acquire (&fs_lock);
+  length = file_length (m->file);
+  lock_release (&fs_lock);
+  while (length > 0)
+    {
+      struct page *p = page_allocate ((uint8_t *) addr + offset, false);
+      if (p == NULL)
+        {
+          unmap (m);
+          return -1;
+        }
+      p->private = false;
+      p->file = m->file;
+      p->file_offset = offset;
+      p->file_bytes = length >= PGSIZE ? PGSIZE : length;
+      offset += p->file_bytes;
+      length -= p->file_bytes;
+      m->page_cnt++;
+    }
+
+  return m->handle;
+}
+
+/* Munmap system call. */
+static int
+sys_munmap (int mapping)
+{
+/* add code here */
+  unmap(lookup_mapping(mapping));
+  return 0;
 }
