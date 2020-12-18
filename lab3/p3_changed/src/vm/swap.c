@@ -24,13 +24,12 @@ void
 swap_init (void)
 {
   swap_device = block_get_role (BLOCK_SWAP);
+
   if (swap_device == NULL)
-    {
-      swap_bitmap = bitmap_create (0);
-    }
+    swap_bitmap = bitmap_create (0);
   else
-    swap_bitmap = bitmap_create (block_size (swap_device)
-                                 / PAGE_SECTORS);
+    swap_bitmap = bitmap_create (block_size (swap_device) / PAGE_SECTORS);
+
   lock_init (&swap_lock);
 }
 
@@ -39,13 +38,11 @@ swap_init (void)
 void
 swap_in (struct page *p)
 {
-  size_t i;
-
   //ASSERT (p->frame != NULL);
   //ASSERT (lock_held_by_current_thread (&p->frame->lock));
   //ASSERT (p->sector != (block_sector_t) -1);
 
-  for (i = 0; i < PAGE_SECTORS; i++)
+  for (int i = 0; i < PAGE_SECTORS; i++)
     block_read (swap_device, p->sector + i,
                 p->frame->base + i * BLOCK_SECTOR_SIZE);
   bitmap_reset (swap_bitmap, p->sector / PAGE_SECTORS);
@@ -57,7 +54,6 @@ bool
 swap_out (struct page *p)
 {
   size_t slot;
-  size_t i;
 
   //ASSERT (p->frame != NULL);
   //ASSERT (lock_held_by_current_thread (&p->frame->lock));
@@ -72,7 +68,7 @@ swap_out (struct page *p)
 
   // Write out page sectors
 /* add code here */
-for (i = 0; i < PAGE_SECTORS; i++)
+for (int i = 0; i < PAGE_SECTORS; i++)
 {
   block_write(swap_device, p->sector + i, p->frame->base + (i * BLOCK_SECTOR_SIZE));
 }

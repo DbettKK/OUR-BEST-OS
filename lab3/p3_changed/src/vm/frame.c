@@ -38,12 +38,10 @@ frame_init (void)
 static struct frame *
 try_frame_alloc_and_lock (struct page *page) 
 {
-  size_t i;
-
   lock_acquire (&scan_lock);
 
   /* Find a free frame. */
-  for (i = 0; i < frame_cnt; i++)
+  for (int i = 0; i < frame_cnt; i++)
     {
       struct frame *f = &frames[i];
       if (!lock_try_acquire (&f->lock))
@@ -58,7 +56,7 @@ try_frame_alloc_and_lock (struct page *page)
     }
 
   /* No free frame.  Find a frame to evict. */
-  for (i = 0; i < frame_cnt * 2; i++) 
+  for (int i = 0; i < frame_cnt * 2; i++) 
     {
       /* Get a frame. */
       struct frame *f = &frames[hand];
@@ -104,9 +102,7 @@ try_frame_alloc_and_lock (struct page *page)
 struct frame *
 frame_alloc_and_lock (struct page *page) 
 {
-  size_t try;
-
-  for (try = 0; try < 3; try++) 
+  for (int try = 0; try < 3; try++) 
     {
       struct frame *f = try_frame_alloc_and_lock (page);
       if (f != NULL) 
