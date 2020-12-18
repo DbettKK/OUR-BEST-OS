@@ -16,6 +16,7 @@
 #include "threads/vaddr.h"
 #include "vm/page.h"
 
+#define max_syscall 20
 
 static int sys_halt (void);
 static int sys_exit (int status);
@@ -36,12 +37,34 @@ static int sys_munmap (int mapping);
 static void syscall_handler (struct intr_frame *);
 static void copy_in (void *, const void *, size_t);
 
+void exit_special (void);
+void * check_ptr2(const void *vaddr);
+
 static struct lock fs_lock;
+/* Our implementation for storing the array of system calls for Task2 and Task3 */
+static void (*syscalls[max_syscall])(struct intr_frame *);
 
 void
 syscall_init (void)
 {
   intr_register_int (0x30, 3, INTR_ON, syscall_handler, "syscall");
+
+  /* Our implementation for Task2: initialize halt,exit,exec */
+  syscalls[SYS_HALT] = &sys_halt;
+  syscalls[SYS_EXIT] = &sys_exit;
+  syscalls[SYS_EXEC] = &sys_exec;
+  /* Our implementation for Task3: initialize create, remove, open, filesize, read, write, seek, tell, and close */
+  syscalls[SYS_WAIT] = &sys_wait;
+  syscalls[SYS_CREATE] = &sys_create;
+  syscalls[SYS_REMOVE] = &sys_remove;
+  syscalls[SYS_OPEN] = &sys_open;
+  syscalls[SYS_WRITE] = &sys_write;
+  syscalls[SYS_SEEK] = &sys_seek;
+  syscalls[SYS_TELL] = &sys_tell;
+  syscalls[SYS_CLOSE] =&sys_close;
+  syscalls[SYS_READ] = &sys_read;
+  syscalls[SYS_FILESIZE] = &sys_filesize;
+
   lock_init (&fs_lock);
 }
 
@@ -49,53 +72,14 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f)
 {
-  typedef int syscall_function (int, int, int);
-
-  /* A system call. */
-  struct syscall
-    {
-      size_t arg_cnt;           /* Number of arguments. */
-      syscall_function *func;   /* Implementation. */
-    };
-
-  /* Table of system calls. */
-  static const struct syscall syscall_table[] =
-    {
-      {0, (syscall_function *) sys_halt},
-      {1, (syscall_function *) sys_exit},
-      {1, (syscall_function *) sys_exec},
-      {1, (syscall_function *) sys_wait},
-      {2, (syscall_function *) sys_create},
-      {1, (syscall_function *) sys_remove},
-      {1, (syscall_function *) sys_open},
-      {1, (syscall_function *) sys_filesize},
-      {3, (syscall_function *) sys_read},
-      {3, (syscall_function *) sys_write},
-      {2, (syscall_function *) sys_seek},
-      {1, (syscall_function *) sys_tell},
-      {1, (syscall_function *) sys_close},
-      {2, (syscall_function *) sys_mmap},
-      {1, (syscall_function *) sys_munmap},
-    };
-
-  const struct syscall *sc;
-  unsigned call_nr;
-  int args[3];
-
-  /* Get the system call. */
-  copy_in (&call_nr, f->esp, sizeof call_nr);
-  if (call_nr >= sizeof syscall_table / sizeof *syscall_table)
-    thread_exit ();
-  sc = syscall_table + call_nr;
-
-  /* Get the system call arguments. */
-  ASSERT (sc->arg_cnt <= sizeof args / sizeof *args);
-  memset (args, 0, sizeof args);
-  copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * sc->arg_cnt);
-
-  /* Execute the system call,
-     and set the return value. */
-  f->eax = sc->func (args[0], args[1], args[2]);
+  /* For Task2 practice, just add 1 to its first argument, and print its result */
+  int * p = f->esp;
+  check_ptr2 (p + 1);
+  int type = * (int *)f->esp;
+  if(type <= 0 || type >= max_syscall){
+    exit_special ();
+  }
+  syscalls[type](f);
 }
 
 
@@ -171,17 +155,20 @@ copy_in_string (const char *us)
 }
 
 /* Halt system call. */
-static int
-sys_halt (void)
+void
+sys_halt (struct intr_frame* f)
 {
   shutdown_power_off ();
 }
 
 /* Exit system call. */
-static int
-sys_exit (int exit_code)
+void
+sys_exit (struct intr_frame* f)
 {
-  thread_current ()->st_exit = exit_code;
+  uint32_t *user_ptr = f->esp;
+  check_ptr2 (user_ptr + 1);
+  *user_ptr++;
+  thread_current ()->st_exit = *user_ptr;
   thread_exit ();
 }
 
@@ -603,4 +590,40 @@ syscall_exit (void)
       next = list_next (e);
       unmap (m);
     }
+}
+
+/* Handle the special situation for thread */
+void 
+exit_special (void)
+{
+  thread_current()->st_exit = -1;
+  thread_exit ();
+}
+
+/* New method to check the address and pages to pass test sc-bad-boundary2, execute */
+void * 
+check_ptr2(const void *vaddr)
+{ 
+  /* Judge address */
+  if (!is_user_vaddr(vaddr))
+  {
+    exit_special ();
+  }
+  /* Judge the page */
+  void *ptr = pagedir_get_page (thread_current()->pagedir, vaddr);
+  if (!ptr)
+  {
+    exit_special ();
+  }
+  /* Judge the content of page */
+  uint8_t *check_byteptr = (uint8_t *) vaddr;
+  for (uint8_t i = 0; i < 4; i++) 
+  {
+    if (get_user(check_byteptr + i) == -1)
+    {
+      exit_special ();
+    }
+  }
+
+  return ptr;
 }
