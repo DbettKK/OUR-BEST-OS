@@ -43,7 +43,7 @@ frame_alloc_and_lock (struct page *page)
   lock_acquire (&vm_sc_lock);
 
   /* Find a free frame. */
-  for (int i = 0; i < f_count; i++)
+  for (size_t i = 0; i < f_count; i++)
     {
       struct frame *f = &frames[i];
       if (!lock_try_acquire (&f->lock))
@@ -58,7 +58,7 @@ frame_alloc_and_lock (struct page *page)
     }
 
   /* No free frame.  Find a frame to evict. */
-  for (int i = 0; i < f_count * 2; i++) 
+  for (size_t i = 0; i < f_count * 2; i++) 
     {
       /* Get a frame. */
       struct frame *f = &frames[hand];
