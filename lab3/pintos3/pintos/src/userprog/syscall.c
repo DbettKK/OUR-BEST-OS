@@ -32,8 +32,8 @@ void sys_write (struct intr_frame* f);
 void sys_seek (struct intr_frame* f);
 void sys_tell (struct intr_frame* f);
 void sys_close (struct intr_frame* f);
-static int sys_mmap (int handle, void *addr);
-static int sys_munmap (int mapping);
+void sys_mmap (struct intr_frame* f);
+void sys_munmap (struct intr_frame* f);
 
 static void syscall_handler (struct intr_frame *);
 static void copy_in (void *, const void *, size_t);
@@ -584,9 +584,13 @@ unmap (struct mapping *m)
 }
 
 /* Mmap system call. */
-static int
-sys_mmap (int handle, void *addr)
+void
+sys_mmap (struct intr_frame* f)
 {
+  uint32_t *user_ptr = f->esp;
+  *user_ptr++;
+  int handle = *user_ptr;
+  void *addr = *(user_ptr+1);
   struct file_descriptor *fd = lookup_fd (handle);
   struct mapping *m = malloc (sizeof *m);
   size_t offset;
@@ -629,14 +633,17 @@ sys_mmap (int handle, void *addr)
       m->page_cnt++;
     }
 
-  return m->handle;
+  f->eax = m->handle;
 }
 
 /* Munmap system call. */
-static int
-sys_munmap (int mapping)
+void
+sys_munmap (struct intr_frame* f)
 {
-/* add code here */
+  uint32_t *user_ptr = f->esp;
+  *user_ptr++;
+  int mapping = *user_ptr;
+
   unmap(lookup_mapping(mapping));
   return 0;
 }
