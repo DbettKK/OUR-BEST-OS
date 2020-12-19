@@ -105,11 +105,10 @@ frame_alloc_and_lock (struct page *page)
   for (int try = 0; try < 3; try++) 
     {
       struct frame *f = try_frame_alloc_and_lock (page);
-      if (f != NULL) 
-        {
-          //ASSERT (lock_held_by_current_thread (&f->lock));
+
+      if (f != NULL)
           return f; 
-        }
+      
       timer_msleep (1000);
     }
 
@@ -129,7 +128,6 @@ frame_lock (struct page *p)
       if (f != p->frame)
         {
           lock_release (&f->lock);
-          //ASSERT (p->frame == NULL); 
         } 
     }
 }
@@ -140,8 +138,6 @@ frame_lock (struct page *p)
 void
 frame_free (struct frame *f)
 {
-  //ASSERT (lock_held_by_current_thread (&f->lock));
-
   f->page = NULL;
   lock_release (&f->lock);
 }
@@ -151,6 +147,5 @@ frame_free (struct frame *f)
 void
 frame_unlock (struct frame *f) 
 {
-  //ASSERT (lock_held_by_current_thread (&f->lock));
   lock_release (&f->lock);
 }
