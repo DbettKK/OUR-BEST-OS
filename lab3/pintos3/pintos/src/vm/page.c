@@ -1,13 +1,13 @@
-#include "vm/page.h"
 #include <stdio.h>
 #include <string.h>
-#include "vm/frame.h"
-#include "vm/swap.h"
-#include "filesys/file.h"
 #include "threads/malloc.h"
 #include "threads/thread.h"
-#include "userprog/pagedir.h"
 #include "threads/vaddr.h"
+#include "filesys/file.h"
+#include "userprog/pagedir.h"
+#include "vm/page.h"
+#include "vm/frame.h"
+#include "vm/swap.h"
 
 /* Define the max. */
 #define S_MAXSIZE (1024 * 1024)
