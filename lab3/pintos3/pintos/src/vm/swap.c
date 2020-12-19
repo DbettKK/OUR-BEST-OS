@@ -1,12 +1,11 @@
-#include "vm/swap.h"
 #include <bitmap.h>
 #include <debug.h>
 #include <stdio.h>
-#include "vm/frame.h"
-#include "vm/page.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-
+#include "vm/frame.h"
+#include "vm/page.h"
+#include "vm/swap.h"
 /* The swap device. */
 static struct block *s_block;
 

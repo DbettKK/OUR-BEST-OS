@@ -1,6 +1,4 @@
-#include "vm/frame.h"
 #include <stdio.h>
-#include "vm/page.h"
 #include "devices/timer.h"
 #include "threads/init.h"
 #include "threads/malloc.h"
@@ -8,7 +6,8 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "userprog/pagedir.h"
-
+#include "vm/frame.h"
+#include "vm/page.h"
 static struct frame *frames;
 static size_t f_count;
 
