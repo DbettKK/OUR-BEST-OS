@@ -611,7 +611,7 @@ setup_stack (const char *cmd_line, void **esp)
       if (page->frame != NULL)
         {
           bool ok;
-          page->read_only = false;
+          page->r_only = false;
           page->private = false;
           ok = init_cmd_line (page->frame->base, page->addr, cmd_line, esp);
           lock_release (&page->frame->lock);

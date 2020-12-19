@@ -39,8 +39,8 @@ void
 swap_in (struct page *p)
 {
   for (int i = 0; i < PAGE_SECTORS; i++)
-    block_read (swap_device, p->sector + i,
-                p->frame->base + i * BLOCK_SECTOR_SIZE);
+    block_read (swap_device, p->sector + i, p->frame->base + i * BLOCK_SECTOR_SIZE);
+    
   bitmap_reset (swap_bitmap, p->sector / PAGE_SECTORS);
   p->sector = (block_sector_t) -1;
 }
@@ -54,6 +54,7 @@ swap_out (struct page *p)
   lock_acquire (&swap_lock);
   slot = bitmap_scan_and_flip (swap_bitmap, 0, 1, false);
   lock_release (&swap_lock);
+
   if (slot == BITMAP_ERROR)
     return false;
 
@@ -62,9 +63,7 @@ swap_out (struct page *p)
   // Write out page sectors
 /* add code here */
 for (int i = 0; i < PAGE_SECTORS; i++)
-{
   block_write(swap_device, p->sector + i, p->frame->base + (i * BLOCK_SECTOR_SIZE));
-}
 
   p->private = false;
   p->file = NULL;

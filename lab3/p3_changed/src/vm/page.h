@@ -11,14 +11,14 @@ struct page
   {
     /* Immutable members. */
     void *addr;                 /* User virtual address. */
-    bool read_only;             /* Read-only page? */
+    bool r_only;             /* Read-only page? */
     struct thread *thread;      /* Owning thread. */
 
     /* Accessed only in owning process context. */
     struct hash_elem hash_elem; /* struct thread `pages' hash element. */
 
     /* Set only in owning process context with frame->frame_lock held.
-       Cleared only with scan_lock and frame->frame_lock held. */
+       Cleared only with vm_sc_lock and frame->frame_lock held. */
     struct frame *frame;        /* Page frame. */
 
     /* Swap information, protected by frame->frame_lock. */
@@ -34,7 +34,7 @@ struct page
 
 void page_exit (void);
 
-struct page *page_allocate (void *, bool read_only);
+struct page *page_allocate (void *, bool r_only);
 void page_deallocate (void *vaddr);
 
 bool page_in (void *fault_addr);
