@@ -7,11 +7,12 @@
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 
 static struct frame *frames;
-static size_t frame_cnt;
+static size_t f_count;
 
-static struct lock scan_lock;
+static struct lock vm_sc_lock;
 static size_t hand;
 
 /* Initialize the frame manager. */
@@ -19,61 +20,58 @@ void
 frame_init (void) 
 {
   void *base;
-
-  lock_init (&scan_lock);
+  lock_init (&vm_sc_lock);
   
   frames = malloc (sizeof *frames * init_ram_pages);
-  if (frames == NULL)
-    PANIC ("out of memory allocating page frames");
 
-  while ((base = palloc_get_page (PAL_USER)) != NULL) 
+  while ( (base = palloc_get_page (PAL_USER)) != NULL ) 
     {
-      struct frame *f = &frames[frame_cnt++];
+      f_count++;
+      struct frame *f = &frames[f_count];
       lock_init (&f->lock);
       f->base = base;
       f->page = NULL;
+      f->pinned = true;
     }
 }
 
 /* Tries to allocate and lock a frame for PAGE.
    Returns the frame if successful, false on failure. */
-static struct frame *
-try_frame_alloc_and_lock (struct page *page) 
+struct frame *
+frame_alloc_and_lock (struct page *page)
 {
-  size_t i;
-
-  lock_acquire (&scan_lock);
+  lock_acquire (&vm_sc_lock);
 
   /* Find a free frame. */
-  for (i = 0; i < frame_cnt; i++)
+  for (size_t i = 0; i < f_count; i++)
     {
       struct frame *f = &frames[i];
       if (!lock_try_acquire (&f->lock))
         continue;
-      if (f->page == NULL) 
+      if (f->page == NULL)
         {
           f->page = page;
-          lock_release (&scan_lock);
+          lock_release (&vm_sc_lock);
           return f;
         } 
       lock_release (&f->lock);
     }
 
   /* No free frame.  Find a frame to evict. */
-  for (i = 0; i < frame_cnt * 2; i++) 
+  for (size_t i = 0; i < f_count * 2; i++) 
     {
       /* Get a frame. */
       struct frame *f = &frames[hand];
-      if (++hand >= frame_cnt)
+      if (++hand >= f_count)
         hand = 0;
 
-      if (!lock_try_acquire (&f->lock))
+      if (!lock_try_acquire (&f->lock) && (&f->pinned))
         continue;
 
       if (f->page == NULL) 
         {
           f->page = page;
-          lock_release (&scan_lock);
+          lock_release (&vm_sc_lock);
           return f;
         } 
 
@@ -83,7 +81,7 @@ try_frame_alloc_and_lock (struct page *page)
           continue;
         }
           
-      lock_release (&scan_lock);
+      lock_release (&vm_sc_lock);
       
       /* Evict this frame. */
       if (!page_out (f->page))
@@ -96,29 +94,7 @@ try_frame_alloc_and_lock (struct page *page)
       return f;
     }
 
-  lock_release (&scan_lock);
-  return NULL;
-}
-
-
-/* Tries really hard to allocate and lock a frame for PAGE.
-   Returns the frame if successful, false on failure. */
-struct frame *
-frame_alloc_and_lock (struct page *page) 
-{
-  size_t try;
-
-  for (try = 0; try < 3; try++) 
-    {
-      struct frame *f = try_frame_alloc_and_lock (page);
-      if (f != NULL) 
-        {
-          ASSERT (lock_held_by_current_thread (&f->lock));
-          return f; 
-        }
-      timer_msleep (1000);
-    }
-
+  lock_release (&vm_sc_lock);
   return NULL;
 }
 
@@ -133,10 +109,7 @@ frame_lock (struct page *p)
     {
       lock_acquire (&f->lock);
       if (f != p->frame)
-        {
           lock_release (&f->lock);
-          ASSERT (p->frame == NULL); 
-        } 
     }
 }
 
@@ -146,17 +119,6 @@ frame_lock (struct page *p)
 void
 frame_free (struct frame *f)
 {
-  ASSERT (lock_held_by_current_thread (&f->lock));
-          
   f->page = NULL;
-  lock_release (&f->lock);
-}
-
-/* Unlocks frame F, allowing it to be evicted.
-   F must be locked for use by the current process. */
-void
-frame_unlock (struct frame *f) 
-{
-  ASSERT (lock_held_by_current_thread (&f->lock));
   lock_release (&f->lock);
 }
