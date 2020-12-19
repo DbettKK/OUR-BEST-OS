@@ -100,13 +100,30 @@ static struct page * page_for_addr (const void *address) {
 
 A1: Copy here the declaration of each new or changed `struct `or`struct` member, global or static variable, `typedef`, or enumeration.  Identify the purpose of each in 25 words or less.
 
+> ```c
+> //vm/frame.h
+> struct frame 
+>   {
+>     struct lock lock;           /* Prevent simultaneous access. */
+>     void *base;                 /* Kernel virtual base address. */
+>     struct page *page;          /* Mapped process page, if any. */
+>   };
+> 
+> //vm/frame.c
+> static struct frame *frames;  /*Set of frames.*/
+> static size_t frame_cnt;    /*Size of frame*/
+> 
+> static struct lock scan_lock; /*Lock to avoid races & munti-processes.*/
+> static size_t hand;  /*Get location of a certain frame.*/
+> ```
+>
 > 
 
 ### ALGORITHMS
 
 A2: In a few paragraphs, describe your code for accessing the data stored in the SPT about a given page.
 
-> 
+> 对于一个给定的page，其包含很多子成员，其中包括了存放数据的frame。Frame的struct里包含了一个指向内核中存放数据位置的指针，同时还有一个struct page *page，来存放引用了数据的page。page最初创建时， 其struct里的page是设为NULL的，只有通过frame.c中的frame_alloc_and_lock（）函数分配，page才能获取到frame
 
 A3: How does your code coordinate accessed and dirty bits between kernel and user virtual addresses that alias a single frame, or alternatively how do you avoid the issue?
 
@@ -116,7 +133,7 @@ A3: How does your code coordinate accessed and dirty bits between kernel and use
 
 A4: When two user processes both need a new frame at the same time, how are races avoided?
 
-> 
+> 我们在frame.c中加入锁scan_lock，使得一次只能在一个进程里搜索frame table。在此基础上，两个进程无法同时争取同一个frame，因此竞争也被避免了。另外，每个单独的frame的struct里都包含其自己的锁（frame-> lock），表示它是否被占用。
 
 ### RATIONALE
 
@@ -130,6 +147,32 @@ A5: Why did you choose the data structure(s) that you did for representing virtu
 
 B1: Copy here the declaration of each new or changed `struct` or `struct` member, global or static variable, `typedef`, or enumeration.  Identify the purpose of each in 25 words or less.
 
+> ```c
+> //vm/page.h
+> struct page 
+>   {
+>     void *addr;                 /* User virtual address. */
+>     bool read_only;             /* Read-only page? */
+>     struct thread *thread;      /* Owning thread. */
+> 
+>     struct hash_elem hash_elem; /* struct thread `pages' hash element. */
+>     
+>     /* Set only in owning process context with frame->frame_lock held.
+>        Cleared only with scan_lock and frame->frame_lock held. */
+>     struct frame *frame;        /* Page frame. */
+>     
+>     /* Swap information, protected by frame->frame_lock. */
+>     block_sector_t sector;       /* Starting sector of swap area, or -1. */
+> 
+>     /* Memory-mapped file information, protected by frame->frame_lock. */
+>     bool private;               /* False to write back to file,
+>                                    true to write back to swap. */
+>     struct file *file;          /* File. */
+>     off_t file_offset;          /* Offset in file. */
+>     off_t file_bytes;           /* Bytes to read/write, 1...PGSIZE. */
+>   };
+> ```
+>
 > 
 
 ### ALGORITHMS
