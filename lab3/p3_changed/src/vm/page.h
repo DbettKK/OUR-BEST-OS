@@ -47,4 +47,4 @@ void page_unlock (const void *);
 hash_hash_func page_hash;
 hash_less_func page_less;
 
-#endif /* vm/page.h */
+#endif
