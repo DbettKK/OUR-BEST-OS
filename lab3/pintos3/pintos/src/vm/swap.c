@@ -8,34 +8,33 @@
 #include "threads/vaddr.h"
 
 /* The swap device. */
-static struct block *s_block;
+static struct block *swap_device;
 
 /* Used swap pages. */
-static struct bitmap *s_bitmap;
+static struct bitmap *swap_bitmap;
 
-/* Protects s_bitmap. */
-static struct lock s_lock;
+/* Protects swap_bitmap. */
+static struct lock swap_lock;
 
 /* Number of sectors per page. */
-static const size_t P_SECTORS = PGSIZE / BLOCK_SECTOR_SIZE;
+#define PAGE_SECTORS (PGSIZE / BLOCK_SECTOR_SIZE)
+
 /* Sets up swap. */
 void
 swap_init (void)
 {
-  s_block = block_get_role (BLOCK_SWAP);
-
-  if (s_block == NULL)
+  swap_device = block_get_role (BLOCK_SWAP);
+  if (swap_device == NULL)
     {
-      PANIC("cannot init the swap block");
-      NOT_REACHED();
+      printf ("no swap device--swap disabled\n");
+      swap_bitmap = bitmap_create (0);
     }
   else
-    {
-      size_t s_size = block_size (s_block) / P_SECTORS;
-      s_bitmap = bitmap_create (s_size);
-    }
-    
-  lock_init (&s_lock);
+    swap_bitmap = bitmap_create (block_size (swap_device)
+                                 / PAGE_SECTORS);
+  if (swap_bitmap == NULL)
+    PANIC ("couldn't create swap bitmap");
+  lock_init (&swap_lock);
 }
 
 /* Swaps in page P, which must have a locked frame
@@ -43,10 +42,16 @@ swap_init (void)
 void
 swap_in (struct page *p)
 {
-  for (size_t i = 0; i < P_SECTORS; i++)
-    block_read (s_block, p->sector + i, p->frame->base + i * BLOCK_SECTOR_SIZE);// 
+  size_t i;
 
-  bitmap_reset (s_bitmap, p->sector / P_SECTORS);
+  ASSERT (p->frame != NULL);
+  ASSERT (lock_held_by_current_thread (&p->frame->lock));
+  ASSERT (p->sector != (block_sector_t) -1);
+
+  for (i = 0; i < PAGE_SECTORS; i++)
+    block_read (swap_device, p->sector + i,
+                p->frame->base + i * BLOCK_SECTOR_SIZE);
+  bitmap_reset (swap_bitmap, p->sector / PAGE_SECTORS);
   p->sector = (block_sector_t) -1;
 }
 
@@ -54,19 +59,26 @@ swap_in (struct page *p)
 bool
 swap_out (struct page *p)
 {
-  lock_acquire (&s_lock);
-  size_t slot = bitmap_scan_and_flip (s_bitmap, 0, 1, false);
-  lock_release (&s_lock);
+  size_t slot;
+  size_t i;
 
+  ASSERT (p->frame != NULL);
+  ASSERT (lock_held_by_current_thread (&p->frame->lock));
+
+  lock_acquire (&swap_lock);
+  slot = bitmap_scan_and_flip (swap_bitmap, 0, 1, false);
+  lock_release (&swap_lock);
   if (slot == BITMAP_ERROR)
     return false;
 
-  p->sector = slot * P_SECTORS;
+  p->sector = slot * PAGE_SECTORS;
 
   // Write out page sectors
-  /* add code here */
-  for (size_t i = 0; i < P_SECTORS; i++)
-    block_write(s_block, p->sector + i, p->frame->base + (i * BLOCK_SECTOR_SIZE));
+/* add code here */
+for (i = 0; i < PAGE_SECTORS; i++)
+{
+  block_write(swap_device, p->sector + i, p->frame->base + (i * BLOCK_SECTOR_SIZE));
+}
 
   p->private = false;
   p->file = NULL;
