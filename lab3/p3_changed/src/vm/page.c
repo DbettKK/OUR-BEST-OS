@@ -118,7 +118,7 @@ page_in (void *fault_addr)
                               p->frame->base, !p->read_only);
 
   /* Release frame. */
-  frame_unlock (p->frame);
+  lock_release (&p->frame->lock);
 
   return success;
 }
@@ -281,5 +281,5 @@ void
 page_unlock (const void *addr)
 {
   struct page *p = page_for_addr (addr);
-  frame_unlock (p->frame);
+  lock_release (&p->frame->lock);
 }

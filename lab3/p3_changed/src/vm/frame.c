@@ -7,6 +7,7 @@
 #include "threads/palloc.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "userprog/pagedir.h"
 
 static struct frame *frames;
 static size_t frame_cnt;
@@ -35,8 +36,8 @@ frame_init (void)
 
 /* Tries to allocate and lock a frame for PAGE.
    Returns the frame if successful, false on failure. */
-static struct frame *
-try_frame_alloc_and_lock (struct page *page) 
+struct frame *
+frame_alloc_and_lock (struct page *page)
 {
   lock_acquire (&scan_lock);
 
@@ -96,26 +97,6 @@ try_frame_alloc_and_lock (struct page *page)
   return NULL;
 }
 
-
-/* Tries really hard to allocate and lock a frame for PAGE.
-   Returns the frame if successful, false on failure. */
-struct frame *
-frame_alloc_and_lock (struct page *page) 
-{
-  for (int try = 0; try < 3; try++) 
-    {
-      struct frame *f = try_frame_alloc_and_lock (page);
-      if (f != NULL) 
-        {
-          //ASSERT (lock_held_by_current_thread (&f->lock));
-          return f; 
-        }
-      timer_msleep (1000);
-    }
-
-  return NULL;
-}
-
 /* Locks P's frame into memory, if it has one.
    Upon return, p->frame will not change until P is unlocked. */
 void
@@ -127,10 +108,7 @@ frame_lock (struct page *p)
     {
       lock_acquire (&f->lock);
       if (f != p->frame)
-        {
           lock_release (&f->lock);
-          //ASSERT (p->frame == NULL); 
-        } 
     }
 }
 
@@ -140,8 +118,6 @@ frame_lock (struct page *p)
 void
 frame_free (struct frame *f)
 {
-  //ASSERT (lock_held_by_current_thread (&f->lock));
-
   f->page = NULL;
   lock_release (&f->lock);
 }
@@ -151,6 +127,5 @@ frame_free (struct frame *f)
 void
 frame_unlock (struct frame *f) 
 {
-  //ASSERT (lock_held_by_current_thread (&f->lock));
   lock_release (&f->lock);
 }

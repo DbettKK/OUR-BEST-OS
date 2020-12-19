@@ -38,10 +38,6 @@ swap_init (void)
 void
 swap_in (struct page *p)
 {
-  //ASSERT (p->frame != NULL);
-  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
-  //ASSERT (p->sector != (block_sector_t) -1);
-
   for (int i = 0; i < PAGE_SECTORS; i++)
     block_read (swap_device, p->sector + i,
                 p->frame->base + i * BLOCK_SECTOR_SIZE);
@@ -54,9 +50,6 @@ bool
 swap_out (struct page *p)
 {
   size_t slot;
-
-  //ASSERT (p->frame != NULL);
-  //ASSERT (lock_held_by_current_thread (&p->frame->lock));
 
   lock_acquire (&swap_lock);
   slot = bitmap_scan_and_flip (swap_bitmap, 0, 1, false);

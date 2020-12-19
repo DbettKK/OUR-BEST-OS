@@ -614,7 +614,7 @@ setup_stack (const char *cmd_line, void **esp)
           page->read_only = false;
           page->private = false;
           ok = init_cmd_line (page->frame->base, page->addr, cmd_line, esp);
-          frame_unlock (page->frame);
+          lock_release (&page->frame->lock);
           return ok;
         }
     }
