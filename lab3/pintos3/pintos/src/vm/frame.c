@@ -8,13 +8,13 @@
 #include "userprog/pagedir.h"
 #include "vm/frame.h"
 #include "vm/page.h"
-static struct frame *frames;
-static size_t f_count;
 
+static struct frame *frames;
 static struct lock vm_sc_lock;
 static size_t hand;
+static size_t f_count;
 
-/* Initialize the frame manager. */
+/* frame初始化. */
 void
 frame_init (void) 
 {
@@ -34,14 +34,13 @@ frame_init (void)
     }
 }
 
-/* Tries to allocate and lock a frame for PAGE.
-   Returns the frame if successful, false on failure. */
+/* Allocate and lock a frame for page. */
 struct frame *
 frame_alloc_and_lock (struct page *page)
 {
   lock_acquire (&vm_sc_lock);
 
-  /* Find a free frame. */
+  /* 找个free frame. */
   for (size_t i = 0; i < f_count; i++)
     {
       struct frame *f = &frames[i];

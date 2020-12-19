@@ -10,12 +10,13 @@
 struct page 
   {
     /* Immutable members. */
+    struct thread *thread;      /* Owning thread. */
     void *addr;                 /* User virtual address. */
     bool r_only;             /* Read-only page? */
-    struct thread *thread;      /* Owning thread. */
-
+    bool dirty; 
+  
     /* Accessed only in owning process context. */
-    struct hash_elem hash_elem; /* struct thread `pages' hash element. */
+    struct hash_elem elem; /* struct thread `pages' hash element. */
 
     /* Set only in owning process context with frame->frame_lock held.
        Cleared only with vm_sc_lock and frame->frame_lock held. */
@@ -29,9 +30,11 @@ struct page
                                    true to write back to swap. */
     struct file *file;          /* File. */
     off_t file_offset;          /* Offset in file. */
-    off_t file_bytes;           /* Bytes to read/write, 1...PGSIZE. */
+    size_t file_bytes;           /* Bytes to read/write, 1...PGSIZE. */
   };
 
+bool page_lock (const void *, bool w_write);
+void page_unlock (const void *);
 void page_exit (void);
 
 struct page *page_allocate (void *, bool r_only);
@@ -40,9 +43,6 @@ void page_deallocate (void *vaddr);
 bool page_in (void *fault_addr);
 bool page_out (struct page *);
 bool page_accessed_recently (struct page *);
-
-bool page_lock (const void *, bool will_write);
-void page_unlock (const void *);
 
 hash_hash_func page_hash;
 hash_less_func page_less;
