@@ -143,7 +143,6 @@ release_child (struct child *cs)
   lock_acquire (&cs->lock);
   new_ref_cnt = --cs->ref_cnt;
   lock_release (&cs->lock);
-
   if (new_ref_cnt == 0)
     free (cs);
 }*/
@@ -527,15 +526,11 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
-
         - READ_BYTES bytes at UPAGE must be read from FILE
           starting at offset OFS.
-
         - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
-
    The pages initialized by this function must be writable by the
    user process if WRITABLE is true, read-only otherwise.
-
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool
@@ -583,7 +578,6 @@ reverse (int argc, char **argv)
    page-relative stack pointer is *OFS, and then adjusts *OFS
    appropriately.  The bytes pushed are rounded to a 32-bit
    boundary.
-
    If successful, returns a pointer to the newly pushed object.
    On failure, returns a null pointer. */
 void * p_on_stack (uint8_t *kpage, size_t *offset, const void *buf, size_t size) {
