@@ -43,7 +43,7 @@ https://static1.squarespace.com/static/5b18aa0955b02c1de94e4412/t/5b85fad2f950b7
 >> A2: When two user processes both need a new frame at the same time,
 >> how are races avoided?
 
-When searching for a frame, processes must first acquire the scan_lock,
+When searching for a frame, processes must first acquire the vm_sc_lock,
 this is done within try_frame_alloc_and_lock() function. This ensures
 synchronicity when accessing the frames array. Additionally frames have
 a lock member that prevent simultaneous access to the same frame. A lock
