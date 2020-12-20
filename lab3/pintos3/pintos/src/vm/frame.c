@@ -73,7 +73,7 @@ frame_alloc_and_lock (struct page *page)
           return f;
         } 
 
-      if (page_accessed_recently (f->page)) 
+      if (is_page_accessed (f->page)) 
         {
           lock_release (&f->lock);
           continue;

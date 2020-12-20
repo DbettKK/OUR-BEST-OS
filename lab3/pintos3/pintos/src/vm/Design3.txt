@@ -62,13 +62,13 @@ The second for-loop of try_frame_alloc_and_lock() function is where a
 frame is evicted. This for-loop iterates through the frames two times
 to check the accessed status. First the frame is checked for an
 associated page. If no associated page is found then we return the frame
-immediately. Otherwise, page_accessed_recently() is called on the page
+immediately. Otherwise, is_page_accessed() is called on the page
 to check the accessed status. If recently accessed, then the loop moves
 to the next frame changing the page status. If the page is not accessed
 recently then the page is evicted and the frame is returned. If no
 page is not recently accessed then the for-loop begins its second
 iteration and now there is a higher chance of pages not being accessed
-recently because of the previous calls to page_accessed_recently().
+recently because of the previous calls to is_page_accessed().
 
 >> B2: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into

@@ -3,10 +3,9 @@
 
 #include <hash.h>
 #include "devices/block.h"
-#include "filesys/off_t.h"
 #include "threads/synch.h"
+#include "filesys/off_t.h"
 
-/* Virtual page. */
 struct page 
   {
     /* Immutable members. */
@@ -36,13 +35,13 @@ struct page
 bool page_lock (const void *, bool w_write);
 bool page_unlock (const void *);
 void page_exit (void);
-
+void page_destroy (struct hash_elem *);
+struct page *get_page_with_addr (const void *);
 struct page *page_allocate (void *, bool r_only);
 void page_deallocate (void *vaddr);
-
 bool page_in (void *fault_addr);
 bool page_out (struct page *);
-bool page_accessed_recently (struct page *);
+bool is_page_accessed (struct page *);
 
 hash_hash_func page_hash;
 hash_less_func page_less;

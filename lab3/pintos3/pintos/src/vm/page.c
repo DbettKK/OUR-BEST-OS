@@ -11,54 +11,9 @@
 
 #define S_MAXSIZE 1048576
 
-/* Destroys a page, which must be in the current process's
-   page table.  Used as a callback for hash_destroy(). */
-static void
-destroy_page (struct hash_elem *elem)
-{
-  struct page *p = hash_entry (elem, struct page, elem);
-  frame_lock (p);
-  if (p->frame)
-    frame_free (p->frame);
-  free (p);
-}
-
-/* Destroys the current process's page table. */
-void
-page_exit (void)
-{
-  struct hash *h = thread_current()->pages;
-  if (h != NULL)
-    hash_destroy (h, destroy_page);
-}
-
-/* Returns the page containing the given virtual ADDRESS,
-   or a null pointer if no such page exists.
-   Allocates stack pages as necessary. */
-static struct page *
-page_for_addr (const void *address)
-{
-  if (address < PHYS_BASE)
-    {
-      struct page page;
-      struct hash_elem *elem;
-
-      /* Find existing page. */
-      page.addr = (void *) pg_round_down (address);
-      elem = hash_find (thread_current()->pages, &page.elem);
-      if (elem != NULL)
-        return hash_entry (elem, struct page, elem);
-      /* No page.  Expand stack? */
-  /* add code */
-      if((page.addr > PHYS_BASE - S_MAXSIZE) && (thread_current()->user_esp - 32 < address))
-        return page_allocate(page.addr, false);
-    }
-  return NULL;
-}
-
 /* Locks a frame for page P and pages it in.
    Returns true if successful, false on failure. */
-static bool
+bool
 install_page_in (struct page *p)
 {
   /* Get a frame for the page. */
@@ -75,10 +30,9 @@ install_page_in (struct page *p)
   else if (p->file != NULL)
     {
       /* Get data from file. */
-      off_t read_bytes = file_read_at (p->file, p->frame->base,
-                                        p->file_bytes, p->file_offset);
-      off_t zero_bytes = PGSIZE - read_bytes;
-      memset (p->frame->base + read_bytes, 0, zero_bytes);
+      off_t rb = file_read_at (p->file, p->frame->base, p->file_bytes, p->file_offset);
+      off_t zb = PGSIZE - read_bytes;
+      memset (p->frame->base + rb, 0, zb);
     }
   else
     {
@@ -101,7 +55,7 @@ page_in (void *fault_addr)
   if (thread_current()->pages == NULL)
     return false;
 
-  p = page_for_addr (fault_addr);
+  p = get_page_with_addr (fault_addr);
   if (p == NULL)
     return false;
 
@@ -135,50 +89,84 @@ page_out (struct page *p)
      dirty bit, to prevent a race with the process dirtying the
      page. */
   pagedir_clear_page(p->thread->pagedir, p->addr);
-/* add code here */
-
   /* Has the frame been modified? */
   dirty = pagedir_is_dirty(p->thread->pagedir, p->addr);
   if(!dirty)
     ok = true;
-/* add code here */
+    
   if(!p->file)
     ok = swap_out(p);
   else
-  {
-    /* Write frame contents to disk if necessary. */
     if (dirty)
-    {
       if (!p->private)
-      {
-          //False Write to File
           ok = file_write_at(p->file, p->frame->base, p->file_bytes, p->file_offset);
-      }
       else
-      {
-          //True Write to Swap
           ok = swap_out(p);
-      }
-    }
-  }
+
   if(ok)
     p->frame = NULL;
-/* add code here */
+
   return ok;
+}
+
+
+/* Destroys the current process's page table. */
+void
+page_exit (void)
+{
+  struct hash *h = thread_current()->pages;
+  if (h != NULL)
+    hash_destroy (h, page_destroy);
+}
+
+/* Returns the page containing the given virtual ADDRESS,
+   or a null pointer if no such page exists.
+   Allocates stack pages as necessary. */
+struct page *
+get_page_with_addr (const void *address)
+{
+  if (address < PHYS_BASE)
+    {
+      struct page page;
+      struct hash_elem *elem;
+
+      /* Find existing page. */
+      page.addr = (void *) pg_round_down (address);
+      elem = hash_find (thread_current()->pages, &page.elem);
+      if (elem != NULL)
+        return hash_entry (elem, struct page, elem);
+      /* No page.  Expand stack? */
+  /* add code */
+      if((page.addr > PHYS_BASE - S_MAXSIZE) && (thread_current()->user_esp - 32 < address))
+        return page_allocate(page.addr, false);
+    }
+  return NULL;
+}
+
+/* Destroys a page, which must be in the current process's
+   page table.  Used as a callback for hash_destroy(). */
+void
+page_destroy (struct hash_elem *elem)
+{
+  struct page *p = hash_entry (elem, struct page, elem);
+  frame_lock (p);
+  if (p->frame)
+    frame_free (p->frame);
+  free (p);
 }
 
 /* Returns true if page P's data has been accessed recently,
    false otherwise.
    P must have a frame locked into memory. */
 bool
-page_accessed_recently (struct page *p)
+is_page_accessed (struct page *p)
 {
-  bool was_accessed;
+  bool accessed;
 
-  was_accessed = pagedir_is_accessed (p->thread->pagedir, p->addr);
-  if (was_accessed)
+  accessed = pagedir_is_accessed (p->thread->pagedir, p->addr);
+  if (accessed)
     pagedir_set_accessed (p->thread->pagedir, p->addr, false);
-  return was_accessed;
+  return accessed;
 }
 
 /* Adds a mapping for user virtual address VADDR to the page hash
@@ -217,7 +205,7 @@ page_allocate (void *vaddr, bool r_only)
 void
 page_deallocate (void *vaddr)
 {
-  struct page *p = page_for_addr (vaddr);
+  struct page *p = get_page_with_addr (vaddr);
 
   frame_lock (p);
   if (p->frame)
@@ -256,7 +244,7 @@ page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNU
 bool
 page_lock (const void *addr, bool w_write)
 {
-  struct page *p = page_for_addr (addr);
+  struct page *p = get_page_with_addr (addr);
   if (p == NULL || (p->r_only && w_write))
     return false;
 
@@ -275,7 +263,7 @@ page_lock (const void *addr, bool w_write)
 bool
 page_unlock (const void *addr)
 {
-  struct page *p = page_for_addr (addr);
+  struct page *p = get_page_with_addr (addr);
   if(p == NULL)
     return false;
   
