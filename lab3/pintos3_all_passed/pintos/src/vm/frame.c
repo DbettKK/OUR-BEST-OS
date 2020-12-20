@@ -22,8 +22,6 @@ frame_init (void)
   lock_init (&vm_sc_lock);
   
   frames = malloc (sizeof *frames * init_ram_pages);
-  if (frames == NULL)
-    PANIC ("out of memory allocating page frames");
 
   while ((base = palloc_get_page (PAL_USER)) != NULL) 
     {
@@ -103,18 +101,13 @@ frame_lock (struct page *p)
     {
       lock_acquire (&f->lock);
       if (f != p->frame)
-        {
           lock_release (&f->lock);
-          ASSERT (p->frame == NULL); 
-        } 
     }
 }
 
 void
 frame_free (struct frame *f)
 {
-  ASSERT (lock_held_by_current_thread (&f->lock));
-          
   f->page = NULL;
   lock_release (&f->lock);
 }
