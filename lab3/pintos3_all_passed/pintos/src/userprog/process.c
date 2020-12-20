@@ -671,7 +671,7 @@ setup_stack (const char *cmd_line, void **esp)
       page->r_only = false;
       page->private = false;
       result = map_to_user (page->frame->base, page->addr, cmd_line, esp);
-      frame_unlock (page->frame);
+      lock_release (&page->frame->lock);
       return result;
     }
   } else  return false;
