@@ -34,13 +34,11 @@ frame_init (void)
     }
 }
 
-/* Allocate and lock a frame for page. */
 struct frame *
 frame_alloc_and_lock (struct page *page)
 {
   lock_acquire (&vm_sc_lock);
 
-  /* 找个free frame. */
   for (size_t i = 0; i < f_count; i++)
     {
       struct frame *f = &frames[i];
@@ -55,7 +53,7 @@ frame_alloc_and_lock (struct page *page)
       lock_release (&f->lock);
     }
 
-  /* No free frame.  Find a frame to evict. */
+  /* Evict a frame. */
   for (size_t i = 0; i < f_count * 2; i++) 
     {
       /* Get a frame. */
@@ -81,7 +79,7 @@ frame_alloc_and_lock (struct page *page)
           
       lock_release (&vm_sc_lock);
       
-      /* Evict this frame. */
+      /* Evict the frame. */
       if (!page_out (f->page))
         {
           lock_release (&f->lock);
@@ -96,12 +94,9 @@ frame_alloc_and_lock (struct page *page)
   return NULL;
 }
 
-/* Locks P's frame into memory, if it has one.
-   Upon return, p->frame will not change until P is unlocked. */
 void
 frame_lock (struct page *p) 
 {
-  /* A frame can be asynchronously removed, but never inserted. */
   struct frame *f = p->frame;
   if (f != NULL) 
     {
@@ -111,9 +106,6 @@ frame_lock (struct page *p)
     }
 }
 
-/* Releases frame F for use by another page.
-   F must be locked for use by the current process.
-   Any data in F is lost. */
 void
 frame_free (struct frame *f)
 {

@@ -3,12 +3,11 @@
 #include <stdbool.h>
 #include "threads/synch.h"
 
-/* Frame struct. */
 struct frame 
   {
-    struct lock lock;           /* Prevent simultaneous access. */
-    struct page *page;          /* Mapped process page, if any. */
-    void *base;                 /* Kernel virtual base address. */
+    struct lock lock;
+    struct page *page;
+    void *base;
     bool pinned;
   };
 

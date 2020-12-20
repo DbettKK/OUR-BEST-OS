@@ -6,18 +6,13 @@
 #include "vm/frame.h"
 #include "vm/page.h"
 #include "vm/swap.h"
-/* The swap device. */
+
 static struct block *s_block;
-
-/* Used swap pages. */
 static struct bitmap *s_bitmap;
-
-/* Protects s_bitmap. */
 static struct lock s_lock;
 
-/* Number of sectors per page. */
 static const size_t P_SECTORS = PGSIZE / BLOCK_SECTOR_SIZE;
-/* Sets up swap. */
+
 void
 swap_init (void)
 {
@@ -37,8 +32,6 @@ swap_init (void)
   lock_init (&s_lock);
 }
 
-/* Swaps in page P, which must have a locked frame
-   (and be swapped out). */
 void
 swap_in (struct page *p)
 {
@@ -49,7 +42,6 @@ swap_in (struct page *p)
   p->sector = (block_sector_t) -1;
 }
 
-/* Swaps out page P, which must have a locked frame. */
 bool
 swap_out (struct page *p)
 {
@@ -62,8 +54,6 @@ swap_out (struct page *p)
 
   p->sector = slot * P_SECTORS;
 
-  // Write out page sectors
-  /* add code here */
   for (size_t i = 0; i < P_SECTORS; i++)
     block_write(s_block, p->sector + i, p->frame->base + (i * BLOCK_SECTOR_SIZE));
 
