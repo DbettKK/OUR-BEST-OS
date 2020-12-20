@@ -272,9 +272,13 @@ page_lock (const void *addr, bool w_write)
 }
 
 /* Unlocks a page locked with page_lock(). */
-void
+bool
 page_unlock (const void *addr)
 {
   struct page *p = page_for_addr (addr);
+  if(p == NULL)
+    return false;
+  
   lock_release (&p->frame->lock);
+  return true;
 }

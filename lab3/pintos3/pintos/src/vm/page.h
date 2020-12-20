@@ -34,7 +34,7 @@ struct page
   };
 
 bool page_lock (const void *, bool w_write);
-void page_unlock (const void *);
+bool page_unlock (const void *);
 void page_exit (void);
 
 struct page *page_allocate (void *, bool r_only);
