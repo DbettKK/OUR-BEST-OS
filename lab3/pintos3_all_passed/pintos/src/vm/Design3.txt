@@ -43,7 +43,7 @@ https://static1.squarespace.com/static/5b18aa0955b02c1de94e4412/t/5b85fad2f950b7
 >> A2: When two user processes both need a new frame at the same time,
 >> how are races avoided?
 
-When searching for a frame, processes must first acquire the scan_lock,
+When searching for a frame, processes must first acquire the vm_sc_lock,
 this is done within try_frame_alloc_and_lock() function. This ensures
 synchronicity when accessing the frames array. Additionally frames have
 a lock member that prevent simultaneous access to the same frame. A lock
@@ -62,13 +62,13 @@ The second for-loop of try_frame_alloc_and_lock() function is where a
 frame is evicted. This for-loop iterates through the frames two times
 to check the accessed status. First the frame is checked for an
 associated page. If no associated page is found then we return the frame
-immediately. Otherwise, page_accessed_recently() is called on the page
+immediately. Otherwise, is_page_accessed() is called on the page
 to check the accessed status. If recently accessed, then the loop moves
 to the next frame changing the page status. If the page is not accessed
 recently then the page is evicted and the frame is returned. If no
 page is not recently accessed then the for-loop begins its second
 iteration and now there is a higher chance of pages not being accessed
-recently because of the previous calls to page_accessed_recently().
+recently because of the previous calls to is_page_accessed().
 
 >> B2: Explain your heuristic for deciding whether a page fault for an
 >> invalid virtual address should cause the stack to be extended into
