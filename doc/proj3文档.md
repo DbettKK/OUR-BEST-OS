@@ -37,7 +37,20 @@ xxx
 
 ## Memory Mapped Files
 
+#### 1. 概述
 
+在 Project 2 中，通过 `read()` 和 `write()` 两个系统调用实现了对文件的读写功能。在本项中，将实现文件操作的另一个接口：可以通过 `mmap()` 系统调用将打开的文件内容映射到内存中，之后可以通过对内存的操作来实现对文件内容的读写；以及通过 `munmap()` 系统调用来移除文件映射，修改过的页将被写回文件。
+
+#### 2. 题目分析
+
+根据题目的描述，关于文件内存映射的设计存在一些限制和要求，整理如下：
+
+1. 进程因为种种原因退出时，需要能够将进行了的映射全部撤销；
+2. 撤销映射时，要保证所有写过的页在撤销过程中被写回文件，而其他的页不执行写入，再页从进程的列表中移除；
+3. 删除或关闭文件 不会对映射产生影响；
+4. 两个或以上进程映射同一文件时，不要求他们数据的一致性。
+
+为了正确执行 `mmap()` 和  `munmap()`，最重要的在于记录「哪些内存空间」映射了「哪些文件」，才能在进程退出等需要时对相应的映射进行操作。具体设计见下。
 
 ## Accessing User Memory
 
@@ -139,7 +152,116 @@ page_allocate (void *vaddr, bool read_only)
 
 ## Memory Mapped Files
 
+首先，为了每个进程能够维护自己的内存映射文件，在 `struct thread` 中添加了必要的 list 项：
 
+``` C
+struct thread
+  {
+    // ...
+    struct list mappings;               /* Memory-mapped files. */
+    // ...
+  }
+```
+
+list 实际的结构体为描述内存映射文件的结构体，其中维护了相对应的文件指针、以及映射到的内存起始点和占用页的数量。详细设计如下：
+
+``` C
+/* Binds a mapping id to a region of memory and a file. */
+struct mapping
+  {
+    struct list_elem elem;      /* List element. */
+    int handle;                 /* Mapping id. */
+    struct file *file;          /* File. */
+    uint8_t *base;              /* Start of memory mapping. */
+    size_t page_cnt;            /* Number of pages mapped. */
+  };
+```
+
+根据这一设计，具体实现了`mmap()` 和  `munmap()` 系统调用的处理程序具体实现分别如下：
+
+``` c
+/* Mmap system call. */
+static int
+sys_mmap (int handle, void *addr)
+{
+  struct file_descriptor *fd = lookup_fd (handle);    // 在进程打开的文件中查找目标文件的描述符
+  struct mapping *m = malloc (sizeof *m);             // 申请空间
+  size_t offset;
+  off_t length;
+
+  if (m == NULL || addr == NULL || pg_ofs (addr) != 0)    // 有效性检查
+    return -1;
+
+  m->handle = thread_current ()->next_handle++;       // ↓ 设置 mapping 的内容
+  lock_acquire (&fs_lock);
+  m->file = file_reopen (fd->file);
+  lock_release (&fs_lock);
+  if (m->file == NULL)
+    {
+      free (m);
+      return -1;
+    }
+  m->base = addr;
+  m->page_cnt = 0;                                    // ↑ 设置 mapping 的内容
+  list_push_front (&thread_current ()->mappings, &m->elem);   // 加入列表
+
+  offset = 0;
+  lock_acquire (&fs_lock);
+  length = file_length (m->file);
+  lock_release (&fs_lock);
+  while (length > 0)        // 根据文件长度分配内存页
+    {
+      struct page *p = page_allocate ((uint8_t *) addr + offset, false);
+      if (p == NULL)
+        {
+          unmap (m);
+          return -1;
+        }
+      p->private = false;
+      p->file = m->file;
+      p->file_offset = offset;
+      p->file_bytes = length >= PGSIZE ? PGSIZE : length;
+      offset += p->file_bytes;
+      length -= p->file_bytes;
+      m->page_cnt++;
+    }
+
+  return m->handle;
+}
+```
+
+``` c
+/* Munmap system call. */
+static int
+sys_munmap (int mapping)
+{
+/* add code here */
+  unmap(lookup_mapping(mapping));       // 调用逻辑函数，见下
+  return 0;
+}
+
+/* Remove mapping M from the virtual address space,
+   writing back any pages that have changed. */
+static void
+unmap (struct mapping *m)
+{
+  list_remove(&m->elem);        // 移除列表元素
+  for(int i = 0; i < m->page_cnt; i++)      // 检查各页是否有写操作
+  {
+    //Pages written by the process are written back to the file
+    if (pagedir_is_dirty(thread_current()->pagedir, m->base + (PGSIZE * i)))
+    {
+      lock_acquire(&fs_lock);
+      file_write_at(m->file, m->base + (PGSIZE * i), PGSIZE, (PGSIZE * i)); // Check 3rd parameter
+      lock_release(&fs_lock);
+    }
+  }
+  for(int i = 0; i < m->page_cnt; i++)    // 释放页
+  {
+    page_deallocate(m->base + (PGSIZE * i));
+  }
+}
+```
 
 ## Accessing User Memory
 
