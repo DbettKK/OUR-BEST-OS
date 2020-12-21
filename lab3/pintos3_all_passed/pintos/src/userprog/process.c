@@ -133,20 +133,6 @@ start_process (void *file_name_)
   NOT_REACHED ();
 }
 
-/* Releases one reference to CS and, if it is now unreferenced,
-   frees it. */
-/*static void
-release_child (struct child *cs) 
-{
-  int new_ref_cnt;
-  
-  lock_acquire (&cs->lock);
-  new_ref_cnt = --cs->ref_cnt;
-  lock_release (&cs->lock);
-
-  if (new_ref_cnt == 0)
-    free (cs);
-}*/
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -173,41 +159,21 @@ process_wait (tid_t child_tid)
       if (new_ref_cnt == 0) {
         free (temp2);
       }    
-      //release_child (temp2);
       return exit_code;
     }
     temp = list_next (temp);
   }
   return -1;
-  // struct thread *cur = thread_current ();
-  // struct list_elem *e;
-
-  // for (e = list_begin (l); e != list_end (l);  e = list_next (e)) 
-  //   {
-  //     struct child *cs = list_entry (e, struct child, child_elem);
-  //     if (cs->tid == child_tid) 
-  //       {
-  //         list_remove (e);
-  //         sema_down (&cs->sema);
-  //         int exit_code = cs->store_exit;
-  //         release_child (cs);
-  //         return exit_code;
-  //       }
-  //   }
-  // return -1;
 }
-
 /* Free the current process's resources. */
 void
-process_exit (void)
-{
+process_exit (void) {
   struct thread *cur = thread_current ();
   struct list_elem *e, *next;
   uint32_t *pd;
 
   printf ("%s: exit(%d)\n", cur->name, cur->st_exit);
 
-  /* Notify parent that we're dead. */
   if (cur->thread_child != NULL) 
     {
       struct child *child = cur->thread_child;
@@ -220,7 +186,6 @@ process_exit (void)
 
       if (new_ref_cnt == 0)
         free (child);
-      //release_child (cs);
     }
 
   /* Free entries of children list. */
@@ -235,7 +200,6 @@ process_exit (void)
 
       if (new_ref_cnt == 0)
         free (child);
-      //release_child (cs);
     }
 
   /* Destroy the page hash table. */
@@ -361,20 +325,17 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
-  /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
-  /* Create page hash table. */
   t->pages = malloc (sizeof *t->pages);
   if (t->pages == NULL)
     goto done;
   hash_init (t->pages, page_hash, page_less, NULL);
 
   char *tmp;
-  /* Extract file_name from command line. */
   while (*cmd_line == ' ')
     cmd_line++;
   char file_name[NAME_MAX + 2];
@@ -382,7 +343,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   tmp = strchr (file_name, ' ');
   if (tmp != NULL) *tmp = '\0';
 
-  /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
   {
@@ -391,7 +351,7 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
   }
   file_deny_write (file);
   t->bin_file = file;
-  /* Read and verify executable header. */
+
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
       || ehdr.e_type != 2
@@ -404,7 +364,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
       goto done; 
     }
 
-  /* Read program headers. */
   file_ofs = ehdr.e_phoff;
   for (i = 0; i < ehdr.e_phnum; i++) 
     {
@@ -424,7 +383,6 @@ load (const char *cmd_line, void (**eip) (void), void **esp)
         case PT_PHDR:
         case PT_STACK:
         default:
-          /* Ignore this segment. */
           break;
         case PT_DYNAMIC:
         case PT_INTERP:
@@ -567,25 +525,15 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
   return true;
 }
 
-/* Reverse the order of the ARGC pointers to char in ARGV. */
-static void
-reverse (int argc, char **argv) 
-{
-  for (; argc > 1; argc -= 2, argv++) 
-    {
-      char *tmp = argv[0];
-      argv[0] = argv[argc - 1];
-      argv[argc - 1] = tmp;
-    }
+static void reverse (int argc, char **argv) {
+  for (; argc > 1; argc -= 2, argv++) {
+    char *tmp = argv[0];
+    argv[0] = argv[argc - 1];
+    argv[argc - 1] = tmp;
+  }
 }
  
-/* Pushes the SIZE bytes in BUF onto the stack in KPAGE, whose
-   page-relative stack pointer is *OFS, and then adjusts *OFS
-   appropriately.  The bytes pushed are rounded to a 32-bit
-   boundary.
-
-   If successful, returns a pointer to the newly pushed object.
-   On failure, returns a null pointer. */
+/* push */
 void * p_on_stack (uint8_t *kpage, size_t *offset, const void *buf, size_t size) {
   // 向上取整
   size_t round_size = ROUND_UP (size, sizeof (uint32_t));
@@ -600,10 +548,6 @@ void * p_on_stack (uint8_t *kpage, size_t *offset, const void *buf, size_t size)
   }
 }
 
-/* Sets up command line arguments in KPAGE, which will be mapped
-   to UPAGE in user space.  The command line arguments are taken
-   from CMD_LINE, separated by spaces.  Sets *ESP to the initial
-   stack pointer for the process. */
 int map_to_user (uint8_t *kpage, uint8_t *upage, const char *cmd_line,
                void **esp) {
   size_t ofs = PGSIZE;
@@ -651,7 +595,6 @@ int map_to_user (uint8_t *kpage, uint8_t *upage, const char *cmd_line,
       || p_on_stack (kpage, &ofs, &null, sizeof null) == NULL)
     return false;
 
-  /* Set initial stack pointer. */
   *esp = upage + ofs;
   return true;
 }
@@ -659,8 +602,7 @@ int map_to_user (uint8_t *kpage, uint8_t *upage, const char *cmd_line,
 /* Create a minimal stack for T by mapping a page at the
    top of user virtual memory.  */
 static bool
-setup_stack (const char *cmd_line, void **esp) 
-{
+setup_stack (const char *cmd_line, void **esp) {
   uint8_t *kpage;
   bool success = false;
   struct page *page = page_allocate (((uint8_t *) PHYS_BASE) - PGSIZE, false);
