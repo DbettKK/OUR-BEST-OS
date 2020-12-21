@@ -397,43 +397,37 @@ A1: Copy here the declaration of each new or changed `struct `or`struct` member,
 > //vm/frame.h
 > struct frame 
 > {
->  struct lock lock;
->  void *base;
->  struct page *page;          /* Mapped process page, if any. */
+>   struct lock lock;           /* 锁，防止同时访问. */
+>   struct page *page;          /* 已映射的进程页. */
+>   void *base;					/* 对应内核虚拟基址. */
+>  bool pinned;				 /* 防止frame在获取资源时被evicted. */
 > };
-> struct frame 
->   {
->     struct lock lock;           /* Prevent simultaneous access. */
->     struct page *page;          /* Mapped process page. */
->     void *base;					/* Kernel virtual base address. */
->     bool pinned;				 /* 防止frame在获取资源时被evicted. */
->   };
-> //vm/frame.c
-> static struct frame *frames;  /* Set of frames.*/
-> static struct lock vm_sc_lock; /*Lock to avoid races & munti-processes.*/
-> static size_t hand;  /*Get location of a certain frame.*/
-> static size_t f_count;      /* Size of frame */
-> 
+>   //vm/frame.c
+>    static struct frame *frames;  	/* frames.*/
+>    static struct lock vm_sc_lock; 	/* 锁，避免race和多线程访问.*/
+>    static size_t hand;  			/* 获取某个帧的具体位置.*/
+>    static size_t f_count;      	/* 帧的大小. */
+>   
 > //vm/page.h
 > struct page 
 > {
->  struct thread *thread;      /* Owning thread. */   
->  void *addr;                 /* User virtual address. */
->  bool r_only;             /* Read-only page? */
->  bool dirty;
->  struct hash_elem elem; /* struct thread `pages' hash element. */
->  block_sector_t sector;       /* Starting sector of swap area, or -1. */
->     
->  struct frame *frame;        /* Page frame. */
+> struct thread *thread;      /* 拥有的线程. */   
+> void *addr;                 /* 用户虚拟地址. */
+> bool r_only;             	/* 是否只读 */
+> bool dirty;
+> struct hash_elem elem; 		/* 本结构体的hash_elem. */
+> block_sector_t sector;      /* swap的起始sector位置. */
+>   
+>  struct frame *frame;
 >  /* Memory-mapped file相关的字段，也可用于页面懒加载 */
 >  bool private;               /* False则file,true则swap. */
 >  struct file *file;          /* 文件指针. */
 >  off_t file_offset;          /* 文件的偏移量. */
->  off_t file_bytes;           /* 文件大小. */
-> };
-> ```
->
-> 
+>    off_t file_bytes;           /* 文件大小. */
+>  };
+>  ```
+>  
+>  
 
 ### ALGORITHMS
 
@@ -481,12 +475,11 @@ B1: Copy here the declaration of each new or changed `struct` or `struct` member
 
 B2: When a frame is required but none is free, some frame must be evicted.  Describe your code for choosing a frame to evict.
 
-> 遍历所有已分配的帧，跳过所有
+> 遍历所有已分配的帧，跳过所有满足以下条件的帧：
 >
 > * 被设置为pinned
 > * 访问位为true
 >
-> 的帧
 
 B3: When a process P obtains a frame that was previously used by a process Q, how do you adjust the page table (and any other data structures) to reflect the frame Q no longer has?
 
@@ -514,21 +507,21 @@ B5: Explain the basics of your VM synchronization design.  In particular, explai
 
 B6: A page fault in process P can cause another process Q's frame to be evicted.  How do you ensure that Q cannot access or modify the page during the eviction process?  How do you avoid a race between P evicting Q's frame and Q faulting the page back in?
 
-> 
+> 牺牲帧的过程并不是一个原子操作，但我们只需要保证，在 P 获得新帧之前，在 Q 的`pagedir`中将其与Q的关系清除即可。这样就可以保证，Q 执行`palloc_get_page`时，要么获得一个合法的帧，要么`page_fault`，而不会得到一个非法的帧。
 
 B7: Suppose a page fault in process P causes a page to be read from the file system or swap.  How do you ensure that a second process Q cannot interfere by e.g. attempting to evict the frame while it is still being read in?
 
-> 
+> 每个frame有`pinned`字段，初始值设为`true`，只有在从文件或者交换区读完数据后才会被设为`false`，这个帧才允许被牺牲。
 
 B8: Explain how you handle access to paged-out pages that occur during system calls.  Do you use page faults to bring in pages (as in user programs), or do you have a mechanism for "locking" frames into physical memory, or do you use some other design?  How do you gracefully handle attempted accesses to invalid virtual addresses?
 
-> 
+> 我们的实现是第一种，在需要的时候`page in`。为每一个虚拟地址生成一个`struct page`，若其被`swap out`，则调用`pagedir_clear_page`，以便在下次CPU使用时产生一个`page fault`。在生成一个`page`之前，先检查该用户虚拟地址是否已经有了一个`page`，若已经有了，说明这个虚拟地址已经被使用过了`（mmap/data segment/code segment/stack segment）`，是无效的。
 
 ### RATIONALE
 
 B9: A single lock for the whole VM system would make synchronization easy, but limit parallelism.  On the other hand, using many locks complicates synchronization and raises the possibility for deadlock but allows for high parallelism.  Explain where your design falls along this continuum and why you chose to design it this way.
 
-> 
+> 我们并不行引入过多的锁，所以只为全局的帧表和交换区引入了两个锁。在仔细思考后，我们发现只要保证在··palloc_get_page`不为`NULL`时，获得的帧是合法的，就不会导致同步错误的问题。所以，尽管并没有为每个帧使用一个锁，我们的程序依然能够通过测试点。
 
 ## MEMORY MAPPED FILES
 
