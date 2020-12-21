@@ -539,11 +539,11 @@ C1: Copy here the declaration of each new or changed `struct` or`struct` member,
 >```c
 >// userprog/syscall.c
 >struct mapping {
->    struct list_elem elem;      /* List element. */
->    int handle;                 /* Mapping id. */
->    struct file *file;          /* File. */
->    uint8_t *base;              /* Start of memory mapping. */
->    size_t page_cnt;            /* Number of pages mapped. */
+>    struct list_elem elem;      /* 列表元素. */
+>    int handle;                 /* 映射的id */
+>    struct file *file;          
+>    uint8_t *base;              /* 内存映射基地址 */
+>    size_t page_cnt;            /* 映射的数量 */
 >};
 >```
 >
