@@ -244,7 +244,7 @@ struct file_descriptor
   {
     struct list_elem elem;      /* List element. */
     struct file *file;          /* File. */
-    int handle;                 /* File handle. */
+    int fd;                 /* File handle. */
   };
 
 /* Open system call. */
@@ -252,22 +252,22 @@ static int
 sys_open (const char *ufile)
 {
   char *kfile = copy_in_string (ufile);
-  struct file_descriptor *fd;
+  struct file_descriptor *file_d;
   int handle = -1;
 
-  fd = malloc (sizeof *fd);
-  if (fd != NULL)
+  file_d = malloc (sizeof *file_d);
+  if (file_d != NULL)
     {
       lock_acquire (&fs_lock);
-      fd->file = filesys_open (kfile);
-      if (fd->file != NULL)
+      file_d->file = filesys_open (kfile);
+      if (file_d->file != NULL)
         {
           struct thread *cur = thread_current ();
-          handle = fd->handle = cur->next_handle++;
-          list_push_front (&cur->fds, &fd->elem);
+          handle = file_d->fd = cur->next_fd++;
+          list_push_front (&cur->files, &file_d->elem);
         }
       else
-        free (fd);
+        free (file_d);
       lock_release (&fs_lock);
     }
 
@@ -279,18 +279,18 @@ sys_open (const char *ufile)
    Terminates the process if HANDLE is not associated with an
    open file. */
 static struct file_descriptor *
-lookup_fd (int handle)
+lookup_file_d (int handle)
 {
   struct thread *cur = thread_current ();
   struct list_elem *e;
 
-  for (e = list_begin (&cur->fds); e != list_end (&cur->fds);
+  for (e = list_begin (&cur->files); e != list_end (&cur->files);
        e = list_next (e))
     {
-      struct file_descriptor *fd;
-      fd = list_entry (e, struct file_descriptor, elem);
-      if (fd->handle == handle)
-        return fd;
+      struct file_descriptor *file_d;
+      file_d = list_entry (e, struct file_descriptor, elem);
+      if (file_d->fd == handle)
+        return file_d;
     }
 
   thread_exit ();
@@ -300,11 +300,11 @@ lookup_fd (int handle)
 static int
 sys_filesize (int handle)
 {
-  struct file_descriptor *fd = lookup_fd (handle);
+  struct file_descriptor *file_d = lookup_file_d (handle);
   int size;
 
   lock_acquire (&fs_lock);
-  size = file_length (fd->file);
+  size = file_length (file_d->file);
   lock_release (&fs_lock);
 
   return size;
@@ -315,10 +315,10 @@ static int
 sys_read (int handle, void *udst_, unsigned size)
 {
   uint8_t *udst = udst_;
-  struct file_descriptor *fd;
+  struct file_descriptor *file_d;
   int bytes_read = 0;
 
-  fd = lookup_fd (handle);
+  file_d = lookup_file_d (handle);
   while (size > 0)
     {
       /* How much to read into this page? */
@@ -332,7 +332,7 @@ sys_read (int handle, void *udst_, unsigned size)
           if (!page_lock (udst, true))
             thread_exit ();
           lock_acquire (&fs_lock);
-          retval = file_read (fd->file, udst, read_amt);
+          retval = file_read (file_d->file, udst, read_amt);
           lock_release (&fs_lock);
           page_unlock (udst);
         }
@@ -378,12 +378,12 @@ static int
 sys_write (int handle, void *usrc_, unsigned size)
 {
   uint8_t *usrc = usrc_;
-  struct file_descriptor *fd = NULL;
+  struct file_descriptor *file_d = NULL;
   int bytes_written = 0;
 
   /* Lookup up file descriptor. */
   if (handle != STDOUT_FILENO)
-    fd = lookup_fd (handle);
+    file_d = lookup_file_d (handle);
 
   while (size > 0)
     {
@@ -402,7 +402,7 @@ sys_write (int handle, void *usrc_, unsigned size)
           retval = write_amt;
         }
       else
-        retval = file_write (fd->file, usrc, write_amt);
+        retval = file_write (file_d->file, usrc, write_amt);
       lock_release (&fs_lock);
       page_unlock (usrc);
 
@@ -431,11 +431,11 @@ sys_write (int handle, void *usrc_, unsigned size)
 static int
 sys_seek (int handle, unsigned position)
 {
-  struct file_descriptor *fd = lookup_fd (handle);
+  struct file_descriptor *file_d = lookup_file_d (handle);
 
   lock_acquire (&fs_lock);
   if ((off_t) position >= 0)
-    file_seek (fd->file, position);
+    file_seek (file_d->file, position);
   lock_release (&fs_lock);
 
   return 0;
@@ -445,11 +445,11 @@ sys_seek (int handle, unsigned position)
 static int
 sys_tell (int handle)
 {
-  struct file_descriptor *fd = lookup_fd (handle);
+  struct file_descriptor *file_d = lookup_file_d (handle);
   unsigned position;
 
   lock_acquire (&fs_lock);
-  position = file_tell (fd->file);
+  position = file_tell (file_d->file);
   lock_release (&fs_lock);
 
   return position;
@@ -459,12 +459,12 @@ sys_tell (int handle)
 static int
 sys_close (int handle)
 {
-  struct file_descriptor *fd = lookup_fd (handle);
+  struct file_descriptor *file_d = lookup_file_d (handle);
   lock_acquire (&fs_lock);
-  file_close (fd->file);
+  file_close (file_d->file);
   lock_release (&fs_lock);
-  list_remove (&fd->elem);
-  free (fd);
+  list_remove (&file_d->elem);
+  free (file_d);
   return 0;
 }
 
@@ -472,7 +472,7 @@ sys_close (int handle)
 struct mapping
   {
     struct list_elem elem;      /* List element. */
-    int handle;                 /* Mapping id. */
+    int fd;                 /* Mapping id. */
     struct file *file;          /* File. */
     uint8_t *base;              /* Start of memory mapping. */
     size_t page_cnt;            /* Number of pages mapped. */
@@ -491,7 +491,7 @@ lookup_mapping (int handle)
        e = list_next (e))
     {
       struct mapping *m = list_entry (e, struct mapping, elem);
-      if (m->handle == handle)
+      if (m->fd == handle)
         return m;
     }
 
@@ -525,7 +525,7 @@ unmap (struct mapping *m)
 static int
 sys_mmap (int handle, void *addr)
 {
-  struct file_descriptor *fd = lookup_fd (handle);
+  struct file_descriptor *file_d = lookup_file_d (handle);
   struct mapping *m = malloc (sizeof *m);
   size_t offset;
   off_t length;
@@ -533,9 +533,9 @@ sys_mmap (int handle, void *addr)
   if (m == NULL || addr == NULL || pg_ofs (addr) != 0)
     return -1;
 
-  m->handle = thread_current ()->next_handle++;
+  m->fd = thread_current ()->next_fd++;
   lock_acquire (&fs_lock);
-  m->file = file_reopen (fd->file);
+  m->file = file_reopen (file_d->file);
   lock_release (&fs_lock);
   if (m->file == NULL)
     {
@@ -567,7 +567,7 @@ sys_mmap (int handle, void *addr)
       m->page_cnt++;
     }
 
-  return m->handle;
+  return m->fd;
 }
 
 /* Munmap system call. */
@@ -586,14 +586,14 @@ syscall_exit (void)
   struct thread *cur = thread_current ();
   struct list_elem *e, *next;
 
-  for (e = list_begin (&cur->fds); e != list_end (&cur->fds); e = next)
+  for (e = list_begin (&cur->files); e != list_end (&cur->files); e = next)
     {
-      struct file_descriptor *fd = list_entry (e, struct file_descriptor, elem);
+      struct file_descriptor *file_d = list_entry (e, struct file_descriptor, elem);
       next = list_next (e);
       lock_acquire (&fs_lock);
-      file_close (fd->file);
+      file_close (file_d->file);
       lock_release (&fs_lock);
-      free (fd);
+      free (file_d);
     }
 
   for (e = list_begin (&cur->mappings); e != list_end (&cur->mappings);
