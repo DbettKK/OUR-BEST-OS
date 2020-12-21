@@ -19,7 +19,25 @@ xxx
 
 ## Paging
 
+#### 1.概述
 
+在 Project 2 中，可执行文件在load阶段直接加载到代码段中。而在Project 3中，需要实现可执行文件的懒加载，在真正访问代码时才加载。在 page-*测试点中，程序先通过
+
+```c
+#define SIZE (2 * 1024 * 1024)
+
+static char buf[SIZE];
+```
+
+分配了很大的静态内存，消耗了所有的帧，因此代码段会无帧可用，load失败。
+
+#### 2. 题目分析
+
+可以把可执行文件视为普通的只读文件，那么可执行文件的懒加载就和 Memory Map 的实现思路一样，在load时为每页可执行文件分配一个`struct page`，里面储存着必要的文件相关的信息。当程序真正访问可执行文件时，会触发`page fault`，这是程序再找到相关信息，获得一个帧，再将文件内容写入该帧。这样就实现了程序的懒加载。
+
+唯一的区别只不过是可执行文件是只读的，因此在pagedir中安装页时要设置 writable 为 false。这样任何对可执行文件的修改都将抛出 rights violation 异常。
+
+同时，为可执行文件分配的帧需要设置为private，这样可以保证evict时这些帧不会被swap到交换区。
 
 ## Stack Growth
 
@@ -68,7 +86,74 @@ xxx
 
 ## Paging
 
+在`load`函数中，先打开文件，读取可执行程序的`Program header`，再根据程序头的信息从相应的文件位置载入代码。因此，只需要修改`load_segment`，将原先直接分配帧的方式改为懒加载即可
 
+原来的代码：
+
+```c
+      /* 拿到一个帧 */
+      uint8_t *kpage = palloc_get_page (PAL_USER);
+
+      /* 从文件中读取代码 */
+      file_read (file, kpage, page_read_bytes);
+
+      /* 将剩余部分置为0 */
+      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+
+      /* 安装帧，将物理地址和用户虚拟地址联系在一起 */
+      install_page (upage, kpage, writable);
+```
+
+现在：
+
+```c
+static bool
+load_segment (struct file *file, off_t ofs, uint8_t *upage,
+              uint32_t read_bytes, uint32_t zero_bytes, bool writable) 
+{
+  ASSERT ((read_bytes + zero_bytes) % PGSIZE == 0);
+  ASSERT (pg_ofs (upage) == 0);
+  ASSERT (ofs % PGSIZE == 0);
+
+  while (read_bytes > 0 || zero_bytes > 0) 
+    {
+      /* 计算出要读取的字节数，清零的字节数 */
+      size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
+      size_t page_zero_bytes = PGSIZE - page_read_bytes;
+      /* 将用户虚拟地址和一个 struct page 绑定在一起 */
+      struct page *p = page_allocate (upage, !writable);
+      if (p == NULL)
+        return false;
+      /* 为这个 struct page 提供必要的信息，以便page fault的时候读取文件 */
+      if (page_read_bytes > 0) 
+        {
+          p->file = file;
+          p->file_offset = ofs;
+          p->file_bytes = page_read_bytes;
+        }
+      /* 为下一页作准备 */
+      read_bytes -= page_read_bytes;
+      zero_bytes -= page_zero_bytes;
+      ofs += page_read_bytes;
+      upage += PGSIZE;
+    }
+  return true;
+}
+```
+
+接下来就是在`page_fault`的时候安装页了
+
+```c
+  else if (p->file != NULL)
+    {
+      // 读文件
+      off_t rb = file_read_at (p->file, p->frame->base, p->file_bytes, p->file_offset);
+      off_t zb = PGSIZE - rb;
+      memset (p->frame->base + rb, 0, zb);
+    }
+```
+
+在`install_page_in`中，如果 `p->file`不为`NULL`，就说明这个page是文件懒加载产生的，就会从根据相应信息从文件读取内容。
 
 ## Stack Growth
 
@@ -311,42 +396,41 @@ A1: Copy here the declaration of each new or changed `struct `or`struct` member,
 > ```c
 > //vm/frame.h
 > struct frame 
+> {
+>  struct lock lock;
+>  void *base;
+>  struct page *page;          /* Mapped process page, if any. */
+> };
+> struct frame 
 >   {
 >     struct lock lock;           /* Prevent simultaneous access. */
->     void *base;                 /* Kernel virtual base address. */
->     struct page *page;          /* Mapped process page, if any. */
+>     struct page *page;          /* Mapped process page. */
+>     void *base;					/* Kernel virtual base address. */
+>     bool pinned;				 /* 防止frame在获取资源时被evicted. */
 >   };
-> 
 > //vm/frame.c
-> static struct frame *frames;  /*Set of frames.*/
-> static size_t frame_cnt;    /*Size of frame*/
-> 
-> static struct lock scan_lock; /*Lock to avoid races & munti-processes.*/
+> static struct frame *frames;  /* Set of frames.*/
+> static struct lock vm_sc_lock; /*Lock to avoid races & munti-processes.*/
 > static size_t hand;  /*Get location of a certain frame.*/
+> static size_t f_count;      /* Size of frame */
 > 
 > //vm/page.h
 > struct page 
->   {
->     void *addr;                 /* User virtual address. */
->     bool read_only;             /* Read-only page? */
->     struct thread *thread;      /* Owning thread. */
-> 
->     struct hash_elem hash_elem; /* struct thread `pages' hash element. */
+> {
+>  struct thread *thread;      /* Owning thread. */   
+>  void *addr;                 /* User virtual address. */
+>  bool r_only;             /* Read-only page? */
+>  bool dirty;
+>  struct hash_elem elem; /* struct thread `pages' hash element. */
+>  block_sector_t sector;       /* Starting sector of swap area, or -1. */
 >     
->     /* Set only in owning process context with frame->frame_lock held.
->        Cleared only with scan_lock and frame->frame_lock held. */
->     struct frame *frame;        /* Page frame. */
->     
->     /* Swap information, protected by frame->frame_lock. */
->     block_sector_t sector;       /* Starting sector of swap area, or -1. */
-> 
->     /* Memory-mapped file information, protected by frame->frame_lock. */
->     bool private;               /* False to write back to file,
->                                    true to write back to swap. */
->     struct file *file;          /* File. */
->     off_t file_offset;          /* Offset in file. */
->     off_t file_bytes;           /* Bytes to read/write, 1...PGSIZE. */
->   };
+>  struct frame *frame;        /* Page frame. */
+>  /* Memory-mapped file相关的字段，也可用于页面懒加载 */
+>  bool private;               /* False则file,true则swap. */
+>  struct file *file;          /* 文件指针. */
+>  off_t file_offset;          /* 文件的偏移量. */
+>  off_t file_bytes;           /* 文件大小. */
+> };
 > ```
 >
 > 
@@ -380,7 +464,15 @@ A5: Why did you choose the data structure(s) that you did for representing virtu
 B1: Copy here the declaration of each new or changed `struct` or `struct` member, global or static variable, `typedef`, or enumeration.  Identify the purpose of each in 25 words or less.
 
 > ```c
-> 
+> //vm/page.h
+> struct page 
+> {
+>  /* Memory-mapped file相关的字段，也可用于页面懒加载 */
+>  bool private;               /* False则file,true则swap. */
+>  struct file *file;          /* 文件指针. */
+>  off_t file_offset;          /* 文件的偏移量. */
+>  off_t file_bytes;           /* 文件大小. */
+> };
 > ```
 >
 > 
@@ -389,21 +481,36 @@ B1: Copy here the declaration of each new or changed `struct` or `struct` member
 
 B2: When a frame is required but none is free, some frame must be evicted.  Describe your code for choosing a frame to evict.
 
-> 
+> 遍历所有已分配的帧，跳过所有
+>
+> * 被设置为pinned
+> * 访问位为true
+>
+> 的帧
 
 B3: When a process P obtains a frame that was previously used by a process Q, how do you adjust the page table (and any other data structures) to reflect the frame Q no longer has?
 
-> 
+> 1. 在 Q 的 pagedir 中清楚对应的虚拟地址。`pagedir_clear_page(p->thread->pagedir, p->addr);`
+> 1. 在 Q 的pages中，将虚拟地址对应的 page的frame设为NULL。`p->frame = NULL;`
 
 B4: Explain your heuristic for deciding whether a page fault for an invalid virtual address should cause the stack to be extended into the page that faulted.
 
-> 
+> 不会，如果访问无效的虚拟地址，进程会直接退出
+>
+> ```c
+>    if((page.addr > PHYS_BASE - S_MAXSIZE) && (thread_current()->user_esp - 32 < address))
+>      return page_allocate(page.addr, false);
+>    return NULL;
+> ```
+>
+> 检测是否合法，不合法直接返回NULL，再有page_fault退出
 
 ### SYNCHRONIZATION
 
 B5: Explain the basics of your VM synchronization design.  In particular, explain how it prevents deadlock.  (Refer to the textbook for an explanation of the necessary conditions for deadlock.)
 
-> 
+> 1. 为交换区添加了一个全局锁`s_lock`，为每次`bitmap_scan_and_flip`提供保护
+> 1. 为帧表frames添加了一个全局锁`vm_sc_lock`，每次对frames操作时（即frame_alloc_and_lock和page_deallocate）都加锁保护
 
 B6: A page fault in process P can cause another process Q's frame to be evicted.  How do you ensure that Q cannot access or modify the page during the eviction process?  How do you avoid a race between P evicting Q's frame and Q faulting the page back in?
 
