@@ -33,7 +33,7 @@ static char buf[SIZE];
 
 #### 2. 题目分析
 
-可以把可执行文件视为普通的只读文件，那么可执行文件的懒加载就和 Memory Map 的实现思路一样，在load时为每页可执行文件分配一个`struct page`，里面储存着必要的文件相关的信息。当程序真正访问可执行文件时，会触发`page fault`，这是程序再找到相关信息，获得一个帧，再将文件内容写入该帧。这样就实现了程序的懒加载。
+可以把可执行文件视为普通的只读文件，那么可执行文件的懒加载就和 Memory Map 的实现思路一样，在load时为每页可执行文件分配一个`struct page`，里面储存着必要的文件相关的信息。当程序真正访问可执行文件时，会触发`page fault`，这时程序再找到相关信息，获得一个帧，再将文件内容写入该帧。这样就实现了程序的懒加载。
 
 唯一的区别只不过是可执行文件是只读的，因此在pagedir中安装页时要设置 writable 为 false。这样任何对可执行文件的修改都将抛出 rights violation 异常。
 
@@ -43,7 +43,7 @@ static char buf[SIZE];
 
 #### 1.概述
 
-在project2中，栈是单页的，整个程序的运行受栈大小的限制。而如果栈需要进行扩大，我们则需要分配额外的页面。同时，和大多数操作系统一样，我们需要对堆栈的大小施加一定的绝对限制，将其大小限制在一定范围内。
+在 Project 2 中，栈是单页的，整个程序的运行受栈大小的限制。而如果栈需要进行扩大，我们则需要分配额外的页面。同时，和大多数操作系统一样，我们需要对堆栈的大小施加一定的绝对限制，将其大小限制在一定范围内。
 
 #### 2.题目分析
 
@@ -74,7 +74,7 @@ static char buf[SIZE];
 
 #### 1. 概述
 
-和project2中系统调用时检查用户栈指针一样，内核必须非常小心，因为用户可以传递空指针，指向未映射的虚拟内存的指针或指向内核虚拟地址空间的指针（位于上方`PHYS_BASE`）。通过终止有问题的进程并释放其资源，必须拒绝所有这些类型的无效指针，从而不会损害内核或其他正在运行的进程。
+和 Project 2 中系统调用时检查用户栈指针一样，内核的处理过程必须足够谨慎，因为用户传递的可能是空指针，或是指向未映射的虚拟内存的指针，也可能是指向内核虚拟地址空间的指针（即位于 `PHYS_BASE` 之上的空间）。对于这些指针无效的情况，内核必须终止有问题的进程并释放其资源，来保证执行的操作不会影响到内核或其他正在运行的进程。
 
 #### 2. 题目分析
 
@@ -180,17 +180,17 @@ get_page_with_addr (const void *address)
 
 ```
 
-get_page_with_addr()描述如上
+`get_page_with_addr()` 描述如上
 
-在get_page_with_addr()函数中，我们会返回一个包含指定虚拟地址的页（如果能找到此页），同时调用了page_allocate()函数用来分配新的页给当前堆栈，函数流程如下：
+在 `get_page_with_addr()` 函数中，我们会返回一个包含指定虚拟地址的页（如果能找到此页），同时调用了 `page_allocate()` 函数用来分配新的页给当前堆栈，函数流程如下：
 
-函数传入参数address，先将其与PHYS_BASE做比较，如果小的话说明需要扩展堆栈；
+函数传入参数 address，先将其与 PHYS_BASE 做比较，如果小的话说明需要扩展堆栈；
 
-新建一个页 p，将p的地址利用pg_roung_down()转到最近的边界处,再试图利用hash_find()找到p中元素
+新建一个页 p，将 p 的地址利用 `pg_roung_down()` 转到最近的边界处,再试图利用 `hash_find()` 找到 p 中元素
 
 上述功能都是在寻找已经建立好的页
 
-接着判断(p.addr > PHYS_BASE - STACK_MAX) && (thread_current()->user_esp - 32 < address)是否为真，此处需要这样判断来避免出现上述题目分析中提到的错误，如果符合条件，跳转至page_allocate，page_allocate()函数实现了栈增长
+接着判断 `(p.addr > PHYS_BASE - STACK_MAX) && (thread_current()->user_esp - 32 < address)` 是否为真，此处需要这样判断来避免出现上述题目分析中提到的错误，如果符合条件，跳转至 `page_allocate`，`page_allocate()` 函数实现了栈增长
 
 ```c
 struct page *
@@ -368,7 +368,7 @@ static struct page * get_page_with_addr (const void *address) {
 
 > `syscall_handler()->copy_in()->page_lock()->get_page_with_addr()->page_lock()->copy_in()->thread_exit()`
 
-我们的逻辑就是通过在syscall_handler()函数中，进行用户指针的一个处理，如果用户指针没问题，则可以通过其指针访问内存获取对应数据，如果存在问题，则最终会在get_page_with_addr()函数中返回NULL，导致page_lock()函数页返回false，并且进而导致在copy_in()函数中因为用户指针的无效导致的进程退出，即thread_exit()，从而完成一个用户指针的校验。总流程可参考上面一行函数的执行过程。
+我们的逻辑就是通过在 `syscall_handler()` 函数中，进行用户指针的一个处理，如果用户指针没问题，则可以通过其指针访问内存获取对应数据，如果存在问题，则最终会在 `get_page_with_addr()` 函数中返回 NULL，导致 `page_lock()` 函数页返回 false，并且进而导致在 `copy_in()` 函数中因为用户指针的无效导致的进程退出，即 `thread_exit()`，从而完成一个用户指针的校验。总流程可参考上面一行函数的执行过程。
 
 # 相关问题的回答
 
@@ -418,7 +418,7 @@ A1: Copy here the declaration of each new or changed `struct `or`struct` member,
 
 A2: In a few paragraphs, describe your code for accessing the data stored in the SPT about a given page.
 
-> 对于一个给定的页，其包含很多子成员，其中包括了存放数据的frame。Frame的struct里包含了一个指向内核中存放数据位置的指针，同时还有一个struct page *page，来存放引用了数据的页。页最初创建时， 其struct里的页是设为NULL的，只有通过frame.c中的frame_alloc_and_lock（）函数分配，页才能获取到frame
+> 对于一个给定的页，其包含很多子成员，其中包括了存放数据的 frame。Frame 的 struct 里包含了一个指向内核中存放数据位置的指针，同时还有一个 struct page *page，来存放引用了数据的页。页最初创建时， 其 struct 里的页是设为 NULL 的，只有通过 `frame.c` 中的 `frame_alloc_and_lock()` 函数分配，页才能获取到 frame。
 
 A3: How does your code coordinate accessed and dirty bits between kernel and user virtual addresses that alias a single frame, or alternatively how do you avoid the issue?
 
@@ -428,13 +428,13 @@ A3: How does your code coordinate accessed and dirty bits between kernel and use
 
 A4: When two user processes both need a new frame at the same time, how are races avoided?
 
-> 我们在frame.c中加入锁scan_lock，使得一次只能在一个进程里搜索frame table。在此基础上，两个进程无法同时争取同一个frame，因此竞争也被避免了。另外，每个单独的frame的struct里都包含其自己的锁（frame-> lock），表示它是否被占用。
+> 我们在 frame.c 中加入锁 scan_lock，使得一次只能在一个进程里搜索 frame table。在此基础上，两个进程无法同时争取同一个 frame，因此竞争也被避免了。另外，每个单独的 frame 的 struct 里都包含其自己的锁（frame-> lock），表示它是否被占用。
 
 ### RATIONALE
 
 A5: Why did you choose the data structure(s) that you did for representing virtual-to-physical mappings?
 
-> 在之前的project中，一个进程的所有页都是映射在该进程的页表里的，而现在我们需要懒加载页，所以我们将页面目录扩展为每个进程的补充页表，并使用用户虚拟地址作为该表项基于以下内容隐式指示用户虚拟地址流程的页面基础。于是所有映射在frame里，当前在内存中的页现在都可以被分配到原始页表里，而没有加载的页则可以在补充页表中找到。
+> 在之前的 project 中，一个进程的所有页都是映射在该进程的页表里的，而现在我们需要懒加载页，所以我们将页面目录扩展为每个进程的补充页表，并使用用户虚拟地址作为该表项基于以下内容隐式指示用户虚拟地址流程的页面基础。于是所有映射在 frame 里，当前在内存中的页现在都可以被分配到原始页表里，而没有加载的页则可以在补充页表中找到。
 
 ##  PAGING TO AND FROM DISK
 
@@ -453,7 +453,7 @@ B1: Copy here the declaration of each new or changed `struct` or `struct` member
 >  };
 > ```
 > 
->用于页面懒加载以及相关文件的操作。
+> 用于页面懒加载以及相关文件的操作。
 
 ### ALGORITHMS
 
@@ -461,14 +461,14 @@ B2: When a frame is required but none is free, some frame must be evicted.  Desc
 
 > 遍历所有已分配的帧，跳过所有满足以下条件的帧：
 >
-> * 被设置为pinned
-> * 访问位为true
+> * 被设置为 pinned
+> * 访问位为 true
 >
 
 B3: When a process P obtains a frame that was previously used by a process Q, how do you adjust the page table (and any other data structures) to reflect the frame Q no longer has?
 
 > 1. 在 Q 的 pagedir 中清楚对应的虚拟地址。`pagedir_clear_page(p->thread->pagedir, p->addr);`
-> 1. 在 Q 的pages中，将虚拟地址对应的 page的frame设为NULL。`p->frame = NULL;`
+> 1. 在 Q 的 pages 中，将虚拟地址对应的 page 的 frame 设为 NULL。`p->frame = NULL;`
 
 B4: Explain your heuristic for deciding whether a page fault for an invalid virtual address should cause the stack to be extended into the page that faulted.
 
@@ -505,7 +505,7 @@ B8: Explain how you handle access to paged-out pages that occur during system ca
 
 B9: A single lock for the whole VM system would make synchronization easy, but limit parallelism.  On the other hand, using many locks complicates synchronization and raises the possibility for deadlock but allows for high parallelism.  Explain where your design falls along this continuum and why you chose to design it this way.
 
-> 我们并不行引入过多的锁，所以只为全局的帧表和交换区引入了两个锁。在仔细思考后，我们发现只要保证在··palloc_get_page`不为`NULL`时，获得的帧是合法的，就不会导致同步错误的问题。所以，尽管并没有为每个帧使用一个锁，我们的程序依然能够通过测试点。
+> 我们并不行引入过多的锁，所以只为全局的帧表和交换区引入了两个锁。在仔细思考后，我们发现只要保证在 `palloc_get_page` 不为 `NULL` 时，获得的帧是合法的，就不会导致同步错误的问题。所以，尽管并没有为每个帧使用一个锁，我们的程序依然能够通过测试点。
 
 ## MEMORY MAPPED FILES
 
@@ -530,18 +530,18 @@ C1: Copy here the declaration of each new or changed `struct` or`struct` member,
 
 C2: Describe how memory mapped files integrate into your virtual memory subsystem.  Explain how the page fault and eviction processes differ between swap pages and other pages.
 
-> 一个线程包含其打开的所有文件，且结合上文所说的mapping结构体即可实现。内存映射文件封装在mapping结构体中。每个映射都包含对其在内存中的地址的引用，以及它映射的文件。每个线程都包含映射到该线程的所有文件的列表，这些文件可用于管理哪些文件直接存在于内存中。否则，包含内存映射文件信息的页面的管理方式与其他页面相同。
+> 一个线程包含其打开的所有文件，且结合上文所说的 mapping 结构体即可实现。内存映射文件封装在 mapping 结构体中。每个映射都包含对其在内存中的地址的引用，以及它映射的文件。每个线程都包含映射到该线程的所有文件的列表，这些文件可用于管理哪些文件直接存在于内存中。否则，包含内存映射文件信息的页面的管理方式与其他页面相同。
 >
 > 不同之处在于：对于属于内存映射文件的页，页错误和逐出过程稍微存在不同。收回时，与文件无关的页将被移动到交换分区，而不管该页是否脏。收回时，只有在修改内存映射文件页时，才能将其写回文件。否则，不需要写入。而对于内存映射文件，交换分区是完全避免的。
 
 C3: Explain how you determine whether a new file mapping overlaps any existing segment.
 
-> 我们只有在找到空闲且未映射的页时，才会分配用于新文件映射的页。page_allocated()函数可以访问所有现有的文件映射，并将拒绝分配任何已占用的空间。page_allocate()函数只会分配空闲且未映射的页。它将尝试将新映射添加到页表，如果页已存在，它将取消映射并返回NULL。
+> 我们只有在找到空闲且未映射的页时，才会分配用于新文件映射的页。`page_allocated()` 函数可以访问所有现有的文件映射，并将拒绝分配任何已占用的空间。`page_allocate()` 函数只会分配空闲且未映射的页。它将尝试将新映射添加到页表，如果页已存在，它将取消映射并返回 NULL。
 >
 
 ### RATIONALE
 
 C4: Mappings created with "mmap" have similar semantics to those of data demand-paged from executables, except that "mmap" mappings are written back to their original files, not to swap.  This implies that much of their implementation can be shared.  Explain why your implementation either does or does not share much of the code for the two situations.
 
-> 任何页面，无论其来源如何，最终都将通过page_out()函数进行分页。唯一的区别是检查页面是否应该写回磁盘。如果页面被标记为私有，那么它会被交换到交换分区，否则它应该被写到磁盘上的文件中。
+> 任何页面，无论其来源如何，最终都将通过 `page_out()` 函数进行分页。唯一的区别是检查页面是否应该写回磁盘。如果页面被标记为私有，那么它会被交换到交换分区，否则它应该被写到磁盘上的文件中。
 >

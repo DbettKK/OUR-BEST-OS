@@ -79,49 +79,49 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f)
 {
-  typedef int syscall_function (int, int, int);
+  // typedef int syscall_function (int, int, int);
 
-  /* A system call. */
-  struct syscall
-    {
-      size_t arg_cnt;           /* Number of arguments. */
-      syscall_function *func;   /* Implementation. */
-    };
+  // /* A system call. */
+  // struct syscall
+  //   {
+  //     size_t arg_cnt;           /* Number of arguments. */
+  //     syscall_function *func;   /* Implementation. */
+  //   };
 
-  /* Table of system calls. */
-  static const struct syscall syscall_table[] =
-    {
-      {0, (syscall_function *) sys_halt},
-      {1, (syscall_function *) sys_exit},
-      {1, (syscall_function *) sys_exec},
-      {1, (syscall_function *) sys_wait},
-      {2, (syscall_function *) sys_create},
-      {1, (syscall_function *) sys_remove},
-      {1, (syscall_function *) sys_open},
-      {1, (syscall_function *) sys_filesize},
-      {3, (syscall_function *) sys_read},
-      {3, (syscall_function *) sys_write},
-      {2, (syscall_function *) sys_seek},
-      {1, (syscall_function *) sys_tell},
-      {1, (syscall_function *) sys_close},
-      {2, (syscall_function *) sys_mmap},
-      {1, (syscall_function *) sys_munmap},
-    };
+  // /* Table of system calls. */
+  // static const struct syscall syscall_table[] =
+  //   {
+  //     {0, (syscall_function *) sys_halt},
+  //     {1, (syscall_function *) sys_exit},
+  //     {1, (syscall_function *) sys_exec},
+  //     {1, (syscall_function *) sys_wait},
+  //     {2, (syscall_function *) sys_create},
+  //     {1, (syscall_function *) sys_remove},
+  //     {1, (syscall_function *) sys_open},
+  //     {1, (syscall_function *) sys_filesize},
+  //     {3, (syscall_function *) sys_read},
+  //     {3, (syscall_function *) sys_write},
+  //     {2, (syscall_function *) sys_seek},
+  //     {1, (syscall_function *) sys_tell},
+  //     {1, (syscall_function *) sys_close},
+  //     {2, (syscall_function *) sys_mmap},
+  //     {1, (syscall_function *) sys_munmap},
+  //   };
 
-  const struct syscall *sc;
-  unsigned call_nr;
-  int args[3];
+  // const struct syscall *sc;
+  // unsigned call_nr;
+  // int args[3];
 
   /* Get the system call. */
-  copy_in (&call_nr, f->esp, sizeof call_nr);
-  if (call_nr >= sizeof syscall_table / sizeof *syscall_table)
-    thread_exit ();
-  sc = syscall_table + call_nr;
+  // copy_in (&call_nr, f->esp, sizeof call_nr);
+  // if (call_nr >= sizeof syscall_table / sizeof *syscall_table)
+  //   thread_exit ();
+  // sc = syscall_table + call_nr;
 
   /* Get the system call arguments. */
-  ASSERT (sc->arg_cnt <= sizeof args / sizeof *args);
-  memset (args, 0, sizeof args);
-  copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * sc->arg_cnt);
+  // ASSERT (sc->arg_cnt <= sizeof args / sizeof *args);
+  // memset (args, 0, sizeof args);
+  // copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * sc->arg_cnt);
 
   /* Execute the system call,
      and set the return value. */
@@ -219,6 +219,9 @@ void
 sys_exit (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
   *user_ptr++;
   thread_current ()->st_exit = *user_ptr;
   thread_exit ();
@@ -229,6 +232,12 @@ void
 sys_exec (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+1), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+1));
   *user_ptr++;
   char *kfile = copy_in_string ((char*)* user_ptr);
 
@@ -245,6 +254,9 @@ void
 sys_wait (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (user_ptr+1, false))
+    thread_exit ();
+  page_unlock (user_ptr+1);
   *user_ptr++;
   return process_wait (*user_ptr);
 }
@@ -254,6 +266,12 @@ void
 sys_create (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+2*sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+2*sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+1), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+1));
   *user_ptr++;
   char *kfile = copy_in_string ((const char *)*user_ptr);
   bool ok;
@@ -271,6 +289,12 @@ void
 sys_remove (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+1), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+1));
   *user_ptr++;
   char *kfile = copy_in_string ((const char *)*user_ptr);
   bool ok;
@@ -295,6 +319,12 @@ void
 sys_open (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+1), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+1));
   *user_ptr++;
   char *kfile = copy_in_string ((const char *)*user_ptr);
   struct file_descriptor *fd;
@@ -346,6 +376,9 @@ void
 sys_filesize (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
   *user_ptr++;
   struct file_descriptor *fd = lookup_fd (*user_ptr);
   int size;
@@ -361,6 +394,12 @@ void
 sys_read (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+3*sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+3*sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+2), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+2));
   *user_ptr++;
   int handle = *user_ptr;
   unsigned size = *(user_ptr+2);
@@ -428,6 +467,12 @@ void
 sys_write (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+3*sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+3*sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+2), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+2));
   *user_ptr++;
   int handle = *user_ptr;
   uint8_t *usrc = *(user_ptr+1);
@@ -486,6 +531,9 @@ void
 sys_seek (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+2*sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+2*sizeof(uint32_t)-1);
   *user_ptr++;
   int handle = *user_ptr;
   unsigned position = *(user_ptr+1);
@@ -503,6 +551,9 @@ void
 sys_tell (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
   *user_ptr++;
   int handle = *user_ptr;
   struct file_descriptor *fd = lookup_fd (handle);
@@ -520,6 +571,9 @@ void
 sys_close (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
   *user_ptr++;
   int handle = *user_ptr;
   struct file_descriptor *fd = lookup_fd (handle);
@@ -588,6 +642,12 @@ void
 sys_mmap (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+2*sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+2*sizeof(uint32_t)-1);
+  if (!page_lock (*(user_ptr+2), false))
+    thread_exit ();
+  page_unlock (*(user_ptr+2));
   *user_ptr++;
   int handle = *user_ptr;
   void *addr = *(user_ptr+1);
@@ -641,6 +701,9 @@ void
 sys_munmap (struct intr_frame* f)
 {
   uint32_t *user_ptr = f->esp;
+  if (!page_lock (f->esp+sizeof(uint32_t)-1, false))
+    thread_exit ();
+  page_unlock (f->esp+sizeof(uint32_t)-1);
   *user_ptr++;
   int mapping = *user_ptr;
 
