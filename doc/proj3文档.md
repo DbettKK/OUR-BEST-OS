@@ -158,23 +158,22 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 ## Stack Growth
 
 ```c
-static struct page *
+struct page *
 get_page_with_addr (const void *address)
 {
   if (address < PHYS_BASE)
     {
-      struct page p;
-      struct hash_elem *e;
+      struct page page;
+      struct hash_elem *elem;
 
-      /* Find existing page. */
-      p.addr = (void *) pg_round_down (address);
-      e = hash_find (thread_current ()->pages, &p.hash_elem);
-      if (e != NULL)
-        return hash_entry (e, struct page, hash_elem);
-      /* No page.  Expand stack? */
-  /* add code */
-      if((p.addr > PHYS_BASE - STACK_MAX) && (thread_current()->user_esp - 32 < address))
-        return page_allocate(p.addr, false);
+      /* find page. */
+      page.addr = (void *) pg_round_down (address);
+      elem = hash_find (thread_current()->pages, &page.elem);
+      if (elem != NULL)
+        return hash_entry (elem, struct page, elem);
+
+      if((page.addr > PHYS_BASE - S_MAXSIZE) && (thread_current()->user_esp - 32 < address))
+        return page_allocate(page.addr, false);
     }
   return NULL;
 }
@@ -195,30 +194,24 @@ get_page_with_addr()描述如上
 
 ```c
 struct page *
-page_allocate (void *vaddr, bool read_only)
+page_allocate (void *vaddr, bool r_only)
 {
-  struct thread *t = thread_current ();
+  struct thread *t = thread_current();
   struct page *p = malloc (sizeof *p);
   if (p != NULL)
     {
-      p->addr = pg_round_down (vaddr);
-
-      p->read_only = read_only;
-      p->private = !read_only;
-
-      p->frame = NULL;
-
-      p->sector = (block_sector_t) -1;
-
+      p->thread = thread_current();
+      p->r_only = r_only;
+      p->private = !r_only;
       p->file = NULL;
       p->file_offset = 0;
       p->file_bytes = 0;
+      p->addr = pg_round_down (vaddr);
+      p->frame = NULL;
+      p->sector = (block_sector_t) -1;
 
-      p->thread = thread_current ();
-
-      if (hash_insert (t->pages, &p->hash_elem) != NULL)
+      if (hash_insert (t->pages, &p->elem) != NULL)
         {
-         
           free (p);
           p = NULL;
         }
