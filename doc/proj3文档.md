@@ -9,7 +9,7 @@
 
 #### Github截图
 
-xxx
+![image-20201222163913173](C:\Users\34879\AppData\Roaming\Typora\typora-user-images\image-20201222163913173.png)
 
 # 通过用例情况
 
@@ -158,11 +158,8 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 ## Stack Growth
 
 ```c
-/* Returns the page containing the given virtual ADDRESS,
-   or a null pointer if no such page exists.
-   Allocates stack pages as necessary. */
 static struct page *
-page_for_addr (const void *address)
+get_page_with_addr (const void *address)
 {
   if (address < PHYS_BASE)
     {
@@ -184,9 +181,9 @@ page_for_addr (const void *address)
 
 ```
 
-page_for_addr()描述如上
+get_page_with_addr()描述如上
 
-在page_for_addr()函数中，我们会返回一个包含指定虚拟地址的页（如果能找到此页），同时调用了page_allocate()函数用来分配新的页给当前堆栈，函数流程如下：
+在get_page_with_addr()函数中，我们会返回一个包含指定虚拟地址的页（如果能找到此页），同时调用了page_allocate()函数用来分配新的页给当前堆栈，函数流程如下：
 
 函数传入参数address，先将其与PHYS_BASE做比较，如果小的话说明需要扩展堆栈；
 
@@ -197,9 +194,6 @@ page_for_addr()描述如上
 接着判断(p.addr > PHYS_BASE - STACK_MAX) && (thread_current()->user_esp - 32 < address)是否为真，此处需要这样判断来避免出现上述题目分析中提到的错误，如果符合条件，跳转至page_allocate，page_allocate()函数实现了栈增长
 
 ```c
-/* Adds a mapping for user virtual address VADDR to the page hash
-   table.  Fails if VADDR is already mapped or if memory
-   allocation fails. */
 struct page *
 page_allocate (void *vaddr, bool read_only)
 {
@@ -224,7 +218,7 @@ page_allocate (void *vaddr, bool read_only)
 
       if (hash_insert (t->pages, &p->hash_elem) != NULL)
         {
-          /* Already mapped. */
+         
           free (p);
           p = NULL;
         }
@@ -243,7 +237,7 @@ page_allocate (void *vaddr, bool read_only)
 struct thread
   {
     // ...
-    struct list mappings;               /* Memory-mapped files. */
+    struct list mappings;               /* 映射列表 */
     // ...
   }
 ```
@@ -251,25 +245,23 @@ struct thread
 list 实际的结构体为描述内存映射文件的结构体，其中维护了相对应的文件指针、以及映射到的内存起始点和占用页的数量。详细设计如下：
 
 ``` C
-/* Binds a mapping id to a region of memory and a file. */
-struct mapping
-  {
-    struct list_elem elem;      /* List element. */
-    int handle;                 /* Mapping id. */
-    struct file *file;          /* File. */
-    uint8_t *base;              /* Start of memory mapping. */
-    size_t page_cnt;            /* Number of pages mapped. */
-  };
+struct mapping {
+    struct list_elem elem;      /* 列表元素. */
+    int handle;                 /* 映射的id */
+    struct file *file;          
+    uint8_t *base;              /* 内存映射基地址 */
+    size_t page_cnt;            /* 映射的数量 */
+};
 ```
 
 根据这一设计，具体实现了`mmap()` 和  `munmap()` 系统调用的处理程序具体实现分别如下：
 
 ``` c
 /* Mmap system call. */
-static int
+int
 sys_mmap (int handle, void *addr)
 {
-  struct file_descriptor *fd = lookup_fd (handle);    // 在进程打开的文件中查找目标文件的描述符
+  struct fd *fd = lookup_fd (fd);    // 在进程打开的文件中查找目标文件的描述符
   struct mapping *m = malloc (sizeof *m);             // 申请空间
   size_t offset;
   off_t length;
@@ -317,7 +309,7 @@ sys_mmap (int handle, void *addr)
 
 ``` c
 /* Munmap system call. */
-static int
+int
 sys_munmap (int mapping)
 {
 /* add code here */
@@ -327,7 +319,7 @@ sys_munmap (int mapping)
 
 /* Remove mapping M from the virtual address space,
    writing back any pages that have changed. */
-static void
+void
 unmap (struct mapping *m)
 {
   list_remove(&m->elem);        // 移除列表元素
@@ -459,17 +451,16 @@ B1: Copy here the declaration of each new or changed `struct` or `struct` member
 
 > ```c
 > //vm/page.h
-> struct page 
-> {
->  /* Memory-mapped file相关的字段，也可用于页面懒加载 */
->  bool private;               /* False则file,true则swap. */
->  struct file *file;          /* 文件指针. */
->  off_t file_offset;          /* 文件的偏移量. */
->  off_t file_bytes;           /* 文件大小. */
-> };
+> struct page {
+>     /* Memory-mapped file相关的字段，也可用于页面懒加载 */
+>      bool private;               /* False则file,true则swap. */
+>      struct file *file;          /* 文件指针. */
+>      off_t file_offset;          /* 文件的偏移量. */
+>      off_t file_bytes;           /* 文件大小. */
+>  };
 > ```
->
 > 
+>用于页面懒加载以及相关文件的操作。
 
 ### ALGORITHMS
 
@@ -532,11 +523,11 @@ C1: Copy here the declaration of each new or changed `struct` or`struct` member,
 >```c
 >// userprog/syscall.c
 >struct mapping {
->    struct list_elem elem;      /* 列表元素. */
->    int handle;                 /* 映射的id */
->    struct file *file;          
->    uint8_t *base;              /* 内存映射基地址 */
->    size_t page_cnt;            /* 映射的数量 */
+>        struct list_elem elem;      /* 列表元素. */
+>        int handle;                 /* 映射的id */
+>        struct file *file;          
+>        uint8_t *base;              /* 内存映射基地址 */
+>        size_t page_cnt;            /* 映射的数量 */
 >};
 >```
 >
