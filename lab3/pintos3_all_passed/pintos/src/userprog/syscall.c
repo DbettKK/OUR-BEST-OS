@@ -17,24 +17,24 @@
 #include "vm/page.h"
 
 
-static int sys_halt (void);
-static int sys_exit (int status);
-static int sys_exec (const char *ufile);
-static int sys_wait (tid_t);
-static int sys_create (const char *ufile, unsigned initial_size);
-static int sys_remove (const char *ufile);
-static int sys_open (const char *ufile);
-static int sys_filesize (int handle);
-static int sys_read (int handle, void *udst_, unsigned size);
-static int sys_write (int handle, void *usrc_, unsigned size);
-static int sys_seek (int handle, unsigned position);
-static int sys_tell (int handle);
-static int sys_close (int handle);
-static int sys_mmap (int handle, void *addr);
-static int sys_munmap (int mapping);
+void sys_halt (void);
+void sys_exit (int status);
+int sys_exec (const char *);
+int sys_wait (int);
+int sys_create (const char *, unsigned);
+int sys_remove (const char *);
+int sys_open (const char *);
+int sys_filesize (int);
+int sys_read (int, void *, unsigned);
+int sys_write (int, void *, unsigned);
+int sys_seek (int, unsigned);
+int sys_tell (int);
+int sys_close (int);
+int sys_mmap (int, void *);
+int sys_munmap (int);
 
-static void syscall_handler (struct intr_frame *);
-static void copy_in (void *, const void *, size_t);
+void syscall_handler (struct intr_frame *);
+void copy_in (void *, const void *, size_t);
 
 static struct lock fs_lock;
 
@@ -46,37 +46,25 @@ syscall_init (void)
 }
 
 /* System call handler. */
-static void
+void
 syscall_handler (struct intr_frame *f)
 {
-  typedef int syscall_function (int, int, int);
+  typedef int func (int, int, int);
 
   /* A system call. */
-  struct syscall
-    {
-      size_t arg_cnt;           /* Number of arguments. */
-      syscall_function *func;   /* Implementation. */
-    };
+  struct syscall {
+    size_t arg_cnt;           /* Number of arguments. */
+    func *func;   /* Implementation. */
+  };
 
   /* Table of system calls. */
-  static const struct syscall syscall_table[] =
-    {
-      {0, (syscall_function *) sys_halt},
-      {1, (syscall_function *) sys_exit},
-      {1, (syscall_function *) sys_exec},
-      {1, (syscall_function *) sys_wait},
-      {2, (syscall_function *) sys_create},
-      {1, (syscall_function *) sys_remove},
-      {1, (syscall_function *) sys_open},
-      {1, (syscall_function *) sys_filesize},
-      {3, (syscall_function *) sys_read},
-      {3, (syscall_function *) sys_write},
-      {2, (syscall_function *) sys_seek},
-      {1, (syscall_function *) sys_tell},
-      {1, (syscall_function *) sys_close},
-      {2, (syscall_function *) sys_mmap},
-      {1, (syscall_function *) sys_munmap},
-    };
+  static const struct syscall syscall_table[] = {
+    {0, (func *) sys_halt}, {1, (func *) sys_exit}, {1, (func *) sys_exec},
+    {1, (func *) sys_wait}, {2, (func *) sys_create}, {1, (func *) sys_remove},
+    {1, (func *) sys_open}, {1, (func *) sys_filesize}, {3, (func *) sys_read},
+    {3, (func *) sys_write}, {2, (func *) sys_seek}, {1, (func *) sys_tell},
+    {1, (func *) sys_close}, {2, (func *) sys_mmap}, {1, (func *) sys_munmap},
+  };
 
   const struct syscall *sc;
   unsigned call_nr;
@@ -93,8 +81,6 @@ syscall_handler (struct intr_frame *f)
   memset (args, 0, sizeof args);
   copy_in (args, (uint32_t *) f->esp + 1, sizeof *args * sc->arg_cnt);
 
-  /* Execute the system call,
-     and set the return value. */
   f->eax = sc->func (args[0], args[1], args[2]);
 }
 
@@ -102,7 +88,7 @@ syscall_handler (struct intr_frame *f)
 /* Copies SIZE bytes from user address USRC to kernel address
    DST.
    Call thread_exit() if any of the user accesses are invalid. */
-static void
+void
 copy_in (void *dst_, const void *usrc_, size_t size)
 {
   uint8_t *dst = dst_;
@@ -130,9 +116,7 @@ copy_in (void *dst_, const void *usrc_, size_t size)
    palloc_free_page().
    Truncates the string at PGSIZE bytes in size.
    Call thread_exit() if any of the user accesses are invalid. */
-static char *
-copy_in_string (const char *us)
-{
+char * copy_in_string (const char *us) {
   char *ks;
   char *upage;
   size_t length;
@@ -171,14 +155,14 @@ copy_in_string (const char *us)
 }
 
 /* Halt system call. */
-static int
+void
 sys_halt (void)
 {
   shutdown_power_off ();
 }
 
 /* Exit system call. */
-static int
+void
 sys_exit (int exit_code)
 {
   thread_current ()->st_exit = exit_code;
@@ -186,7 +170,7 @@ sys_exit (int exit_code)
 }
 
 /* Exec system call. */
-static int
+int
 sys_exec (const char *ufile)
 {
   char *kfile = copy_in_string (ufile);
@@ -201,14 +185,14 @@ sys_exec (const char *ufile)
 }
 
 /* Wait system call. */
-static int
+int
 sys_wait (tid_t child)
 {
   return process_wait (child);
 }
 
 /* Create system call. */
-static int
+int
 sys_create (const char *ufile, unsigned initial_size)
 {
   char *kfile = copy_in_string (ufile);
@@ -224,7 +208,7 @@ sys_create (const char *ufile, unsigned initial_size)
 }
 
 /* Remove system call. */
-static int
+int
 sys_remove (const char *ufile)
 {
   char *kfile = copy_in_string (ufile);
@@ -240,19 +224,18 @@ sys_remove (const char *ufile)
 }
 
 /* A file descriptor, for binding a file handle to a file. */
-struct file_descriptor
-  {
-    struct list_elem elem;      /* List element. */
-    struct file *file;          /* File. */
-    int fd;                 /* File handle. */
-  };
+struct fd {
+  struct list_elem elem;      /* List element. */
+  struct file *file;          /* File. */
+  int fd;                 /* File handle. */
+};
 
 /* Open system call. */
-static int
+int
 sys_open (const char *ufile)
 {
   char *kfile = copy_in_string (ufile);
-  struct file_descriptor *file_d;
+  struct fd *file_d;
   int handle = -1;
 
   file_d = malloc (sizeof *file_d);
@@ -278,7 +261,7 @@ sys_open (const char *ufile)
 /* Returns the file descriptor associated with the given handle.
    Terminates the process if HANDLE is not associated with an
    open file. */
-static struct file_descriptor *
+static struct fd *
 lookup_file_d (int handle)
 {
   struct thread *cur = thread_current ();
@@ -287,8 +270,8 @@ lookup_file_d (int handle)
   for (e = list_begin (&cur->files); e != list_end (&cur->files);
        e = list_next (e))
     {
-      struct file_descriptor *file_d;
-      file_d = list_entry (e, struct file_descriptor, elem);
+      struct fd *file_d;
+      file_d = list_entry (e, struct fd, elem);
       if (file_d->fd == handle)
         return file_d;
     }
@@ -297,10 +280,10 @@ lookup_file_d (int handle)
 }
 
 /* Filesize system call. */
-static int
+int
 sys_filesize (int handle)
 {
-  struct file_descriptor *file_d = lookup_file_d (handle);
+  struct fd *file_d = lookup_file_d (handle);
   int size;
 
   lock_acquire (&fs_lock);
@@ -310,12 +293,11 @@ sys_filesize (int handle)
   return size;
 }
 
-/* Read system call. */
-static int
+int
 sys_read (int handle, void *udst_, unsigned size)
 {
   uint8_t *udst = udst_;
-  struct file_descriptor *file_d;
+  struct fd *file_d;
   int bytes_read = 0;
 
   file_d = lookup_file_d (handle);
@@ -374,11 +356,11 @@ sys_read (int handle, void *udst_, unsigned size)
 }
 
 /* Write system call. */
-static int
+int
 sys_write (int handle, void *usrc_, unsigned size)
 {
   uint8_t *usrc = usrc_;
-  struct file_descriptor *file_d = NULL;
+  struct fd *file_d = NULL;
   int bytes_written = 0;
 
   /* Lookup up file descriptor. */
@@ -428,10 +410,10 @@ sys_write (int handle, void *usrc_, unsigned size)
 }
 
 /* Seek system call. */
-static int
+int
 sys_seek (int handle, unsigned position)
 {
-  struct file_descriptor *file_d = lookup_file_d (handle);
+  struct fd *file_d = lookup_file_d (handle);
 
   lock_acquire (&fs_lock);
   if ((off_t) position >= 0)
@@ -442,10 +424,10 @@ sys_seek (int handle, unsigned position)
 }
 
 /* Tell system call. */
-static int
+int
 sys_tell (int handle)
 {
-  struct file_descriptor *file_d = lookup_file_d (handle);
+  struct fd *file_d = lookup_file_d (handle);
   unsigned position;
 
   lock_acquire (&fs_lock);
@@ -456,10 +438,10 @@ sys_tell (int handle)
 }
 
 /* Close system call. */
-static int
+int
 sys_close (int handle)
 {
-  struct file_descriptor *file_d = lookup_file_d (handle);
+  struct fd *file_d = lookup_file_d (handle);
   lock_acquire (&fs_lock);
   file_close (file_d->file);
   lock_release (&fs_lock);
@@ -469,14 +451,13 @@ sys_close (int handle)
 }
 
 /* Binds a mapping id to a region of memory and a file. */
-struct mapping
-  {
-    struct list_elem elem;      /* List element. */
-    int fd;                 /* Mapping id. */
-    struct file *file;          /* File. */
-    uint8_t *base;              /* Start of memory mapping. */
-    size_t page_cnt;            /* Number of pages mapped. */
-  };
+struct mapping {
+  struct list_elem elem;      /* List element. */
+  int fd;                     /* Mapping id. */
+  struct file *file;          /* File. */
+  uint8_t *base;              /* Start of memory mapping. */
+  size_t page_cnt;            /* Number of pages mapped. */
+};
 
 /* Returns the file descriptor associated with the given handle.
    Terminates the process if HANDLE is not associated with a
@@ -500,7 +481,7 @@ lookup_mapping (int handle)
 
 /* Remove mapping M from the virtual address space,
    writing back any pages that have changed. */
-static void
+void
 unmap (struct mapping *m)
 {
 /* add code here */
@@ -522,10 +503,10 @@ unmap (struct mapping *m)
 }
 
 /* Mmap system call. */
-static int
+int
 sys_mmap (int handle, void *addr)
 {
-  struct file_descriptor *file_d = lookup_file_d (handle);
+  struct fd *file_d = lookup_file_d (handle);
   struct mapping *m = malloc (sizeof *m);
   size_t offset;
   off_t length;
@@ -571,7 +552,7 @@ sys_mmap (int handle, void *addr)
 }
 
 /* Munmap system call. */
-static int
+int
 sys_munmap (int mapping)
 {
 /* add code here */
@@ -588,7 +569,7 @@ syscall_exit (void)
 
   for (e = list_begin (&cur->files); e != list_end (&cur->files); e = next)
     {
-      struct file_descriptor *file_d = list_entry (e, struct file_descriptor, elem);
+      struct fd *file_d = list_entry (e, struct fd, elem);
       next = list_next (e);
       lock_acquire (&fs_lock);
       file_close (file_d->file);

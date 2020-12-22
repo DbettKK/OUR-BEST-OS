@@ -366,14 +366,14 @@ static void copy_in (void *dst_, const void *usrc_, size_t size) {
 }
 
 bool page_lock (const void *addr, bool will_write) {
-  struct page *p = page_for_addr (addr);
+  struct page *p = get_page_with_addr (addr);
   if (p == NULL || (p->read_only && will_write))
     return false;
 
   ...
 }
 
-static struct page * page_for_addr (const void *address) {
+static struct page * get_page_with_addr (const void *address) {
   if (address < PHYS_BASE){
       ...
   }
@@ -381,9 +381,9 @@ static struct page * page_for_addr (const void *address) {
 }
 ```
 
-> `syscall_handler()->copy_in()->page_lock()->page_for_addr()->page_lock()->copy_in()->thread_exit()`
+> `syscall_handler()->copy_in()->page_lock()->get_page_with_addr()->page_lock()->copy_in()->thread_exit()`
 
-我们的逻辑就是通过在syscall_handler()函数中，进行用户指针的一个处理，如果用户指针没问题，则可以通过其指针访问内存获取对应数据，如果存在问题，则最终会在page_for_addr()函数中返回NULL，导致page_lock()函数页返回false，并且进而导致在copy_in()函数中因为用户指针的无效导致的进程退出，即thread_exit()，从而完成一个用户指针的校验。总流程可参考上面一行函数的执行过程。
+我们的逻辑就是通过在syscall_handler()函数中，进行用户指针的一个处理，如果用户指针没问题，则可以通过其指针访问内存获取对应数据，如果存在问题，则最终会在get_page_with_addr()函数中返回NULL，导致page_lock()函数页返回false，并且进而导致在copy_in()函数中因为用户指针的无效导致的进程退出，即thread_exit()，从而完成一个用户指针的校验。总流程可参考上面一行函数的执行过程。
 
 # 相关问题的回答
 
